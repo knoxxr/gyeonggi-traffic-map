@@ -16,9 +16,10 @@
   - **3-레이어 분리 캔버스 + 뷰포트 컬링**: GPU 히트맵(`glCanvas`) / 행정 경계·라벨(`vectorCanvas`, 확대 시 뷰포트 AABB 컬링) / 30fps 급변 펄스(`fxCanvas`)를 분리해 불필요한 재렌더링 제거
   - **사전 계산 3차 보간 & Gzip 내장 번들**: 347 KB gzip 압축 데이터를 브라우저 네이티브 `DecompressionStream("gzip")`으로 0.7초 내 초기화, 총 단일 실행 파일 크기 **~640 KB**
   - **32×32 공간 격자 인덱스**: 전국 3,559개 행정동·256개 시군구 호버/클릭 히트 테스트를 O(1)에 처리
-- **실시간 KST LIVE & 외부 REST API 자동 폴링**:
+- **실시간 유동인구·ITS 수집 & Google Drive 히스토리 재생 (`gas/Code.gs`)**:
   - `LIVE` 모드: 한국 표준시(KST) 1초 동기화 + 3초 주기 실시간 트래픽 미세 변동 시뮬레이션
-  - **실시간 API 연동**: 임의의 CORS 지원 JSON API(또는 자체 프록시/Cloudflare Worker) URL과 폴링 주기(5초~5분)를 입력해 전국 행정동·시군구 실데이터를 지도에 자동 반영
+  - **Google Sheets 자동 수집기**: `gas/Code.gs`를 본인 Google 스프레드시트에 설치하면 서울시 실시간 유동인구(SKT·KT 기반)와 전국 16개 시·도 ITS 도로 혼잡도를 15분마다 자동 누적(`최신현황` + 월별 `히스토리_YYYYMM` 시트)
+  - **Drive 히스토리 재생**: 상단 `실시간 API · 데이터 → Drive 히스토리` 탭에서 저장된 날짜를 선택해 과거 하루치 인파·혼잡도 변화를 24시간 타임라인으로 그대로 재생 (설치 안내: [`gas/README.md`](gas/README.md))
 - **4가지 변화량/규모 지표 & 2단계 시간 해상도**:
   - `변화율 (Δ%)` / `Δ트래픽 (Mbps·Gbps)` / `일평균 대비 (%)` / `총 트래픽`
   - `15분 단위 (96구간)` / `1시간 단위 (24구간)` + 평일/주말 비교
@@ -29,14 +30,19 @@
 
 ```text
 gyeonggi-traffic-map/
-├── index.html                        # 완전 자립형 전국 실행 파일 (~640 KB, 브라우저에서 바로 실행)
+├── index.html                        # 완전 자립형 전국 실행 파일 (~669 KB, 브라우저에서 바로 실행)
 ├── src/
 │   └── app.html                      # WebGL2 + 3-레이어 인터랙티브 지도 및 UI 소스 템플릿
+├── gas/
+│   ├── Code.gs                       # Google Sheets 실시간 유동인구·ITS 수집기 + 히스토리 API
+│   └── README.md                     # 5분 설치 및 웹 앱 배포 가이드
 ├── scripts/
 │   ├── build_data.py                 # 전국 3,559 행정동 공유 아크 + 25,435 육각 셀 + gzip 번들 생성기
 │   └── build_app.py                  # gzip Base64 인라인 자립형 HTML 번들러
 ├── data/
 │   └── korea_bundle.json.gz          # 전처리·gzip 압축된 전국 토폴로지 + 공간 모델 번들 (~347 KB)
+├── icons/                            # 앱 아이콘 (1024/512/192/180px)
+├── screenshots/                      # 앱 등록용 스크린샷 (폰·데스크톱)
 └── raw/
     └── HangJeongDong_ver20261001.geojson  # 대한민국 최신 행정동 원본 경계 (vuski/admdongkor, git 제외)
 ```

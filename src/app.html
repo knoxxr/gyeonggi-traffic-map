@@ -286,6 +286,25 @@
             </div>
           </div>
 
+          <div id="liveCrowdBox" class="hidden p-3.5 border-b border-[var(--card-border)] bg-[var(--background)]/40">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span id="liveCrowdDot" class="w-2 h-2 rounded-full bg-[#dc2626] shrink-0"></span>
+                <h2 id="liveCrowdTitle" class="text-xs font-bold text-[var(--foreground)] truncate">실시간 유동인구·혼잡 TOP</h2>
+              </div>
+              <button id="exitCrowdModeBtn" class="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-pointer shrink-0">종료</button>
+            </div>
+            <div class="flex items-center justify-between gap-1.5 mb-2">
+              <div class="flex items-center p-0.5 rounded-md bg-[var(--background)] border border-[var(--border)] text-[11px]">
+                <button class="seg-btn active px-2 py-0.5 rounded cursor-pointer" data-crowd-filter="all">전체</button>
+                <button class="seg-btn px-2 py-0.5 rounded cursor-pointer" data-crowd-filter="seoul_pop">서울 인파</button>
+                <button class="seg-btn px-2 py-0.5 rounded cursor-pointer" data-crowd-filter="its">전국 ITS</button>
+              </div>
+              <span id="liveCrowdMeta" class="text-[11px] font-mono text-[var(--muted-foreground)] truncate"></span>
+            </div>
+            <div id="liveCrowdList" class="space-y-1 max-h-52 overflow-y-auto thin-scroll pr-0.5"></div>
+          </div>
+
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between gap-2 mb-2.5">
               <h2 id="rankHeading" class="text-xs font-semibold text-[var(--foreground)]">시간대별 변화 TOP 셀</h2>
@@ -444,24 +463,25 @@
       </div>
 
       <div class="flex items-center gap-1 p-1 mt-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
-        <button id="tabApiBtn" class="seg-btn active flex-1 py-1.5 rounded-md cursor-pointer font-medium">실시간 API 자동 폴링</button>
-        <button id="tabFileBtn" class="seg-btn flex-1 py-1.5 rounded-md cursor-pointer font-medium">CSV / JSON 파일 업로드</button>
+        <button id="tabApiBtn" class="seg-btn active flex-1 py-1.5 rounded-md cursor-pointer font-medium">실시간 API 폴링</button>
+        <button id="tabHistoryBtn" class="seg-btn flex-1 py-1.5 rounded-md cursor-pointer font-medium">Drive 히스토리</button>
+        <button id="tabFileBtn" class="seg-btn flex-1 py-1.5 rounded-md cursor-pointer font-medium">CSV · JSON 업로드</button>
       </div>
 
       <div id="tabApiPanel" class="py-3 space-y-3">
         <p class="text-[var(--muted-foreground)] leading-relaxed">
-          통신사 B2B 프록시, 사내 서버, 또는 공공 교통 API 어댑터의 <strong>JSON 엔드포인트</strong>를 연결하면 지정한 주기마다 전국 3,559개 행정동 및 25,435개 셀 지도를 실시간 갱신합니다.
+          Google Apps Script 웹 앱 URL(<code>gas/Code.gs</code>)이나 공공·통신 API 프록시의 <strong>JSON 엔드포인트</strong>를 연결하면 지정한 주기마다 전국 유동인구·혼잡도와 25,435개 셀 지도를 실시간 갱신합니다.
         </p>
 
         <div class="space-y-2">
           <div>
-            <label for="apiUrlInput" class="block font-medium mb-1">실시간 JSON API URL</label>
-            <input id="apiUrlInput" type="url" placeholder="https://your-worker.workers.dev/korea-traffic.json" class="w-full px-2.5 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
+            <label for="apiUrlInput" class="block font-medium mb-1">실시간 JSON API / Google Apps Script 웹 앱 URL</label>
+            <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-2.5 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <label for="apiAuthInput" class="block font-medium mb-1">인증 헤더 (선택: Bearer 토큰 등)</label>
-              <input id="apiAuthInput" type="text" placeholder="Authorization: Bearer ..." class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
+              <label for="apiAuthInput" class="block font-medium mb-1">인증 헤더 또는 GAS 토큰 (선택)</label>
+              <input id="apiAuthInput" type="text" placeholder="비워두거나 token 값 / Bearer ..." class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
             </div>
             <div>
               <label for="apiIntervalSelect" class="block font-medium mb-1">자동 갱신 주기</label>
@@ -485,15 +505,53 @@
         <div id="apiStatusBox" class="hidden p-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] leading-relaxed"></div>
 
         <details class="rounded-lg border border-[var(--card-border)] bg-[var(--background)] p-2.5">
-          <summary class="cursor-pointer font-medium text-[var(--foreground)]">지원 JSON 응답 스키마 보기 (전국 행정동 코드 · 이름 · 경위도 좌표 지원)</summary>
-          <pre class="mt-2 p-2 rounded bg-[var(--card)] border border-[var(--card-border)] overflow-x-auto font-mono text-[11px] leading-relaxed text-[var(--muted-foreground)]">// 1) 행정동별 실시간 스냅샷 (직전 폴링과 자동 Δ 비교)
+          <summary class="cursor-pointer font-medium text-[var(--foreground)]">지원 JSON 응답 스키마 보기 (서울 유동인구 · 전국 ITS · 행정동 · 경위도)</summary>
+          <pre class="mt-2 p-2 rounded bg-[var(--card)] border border-[var(--card-border)] overflow-x-auto font-mono text-[11px] leading-relaxed text-[var(--muted-foreground)]">// 1) 실시간 유동인구 · ITS 혼잡도 스냅샷 (gas/Code.gs 기본 출력)
 { "data": [
-  { "adm_cd": "1168064000", "traffic_gbps": 52.4 },
-  { "sggnm": "해운대구", "dongnm": "우1동", "traffic_gbps": 34.1 }
+  { "lon": 127.0276, "lat": 37.4979, "name": "강남역", "source": "seoul_pop", "pop": 58000, "congest": "약간 붐빔", "traffic_gbps": 38.7 },
+  { "lon": 129.0596, "lat": 35.1578, "name": "부산 서면·도심", "source": "its", "speed": 24.5, "congest": "정체", "traffic_gbps": 16.4 }
 ]}
-// 2) 기지국·셀 경위도 좌표 스냅샷 (가장 가까운 전국 2.1km 셀에 직접 반영)
-[ { "lon": 127.0276, "lat": 37.4979, "traffic_gbps": 18.2 } ]</pre>
+// 2) 행정동별 실시간 스냅샷 (adm_cd 또는 sggnm + dongnm)
+{ "data": [ { "adm_cd": "1168064000", "traffic_gbps": 52.4 } ] }</pre>
         </details>
+      </div>
+
+      <div id="tabHistoryPanel" class="hidden py-3 space-y-3">
+        <p class="text-[var(--muted-foreground)] leading-relaxed">
+          내 Google Drive 스프레드시트(<code>gas/Code.gs</code>)에 누적된 <strong>과거 일자별 서울 유동인구 · 전국 ITS 데이터</strong>를 불러와 하단 24시간 타임라인으로 그대로 재생·분석합니다.
+        </p>
+
+        <div class="space-y-2">
+          <div>
+            <label for="historyUrlInput" class="block font-medium mb-1">Google Apps Script 웹 앱 URL</label>
+            <input id="historyUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-2.5 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label for="historyDateSelect" class="block font-medium mb-1">Google Drive 저장 날짜 선택</label>
+              <select id="historyDateSelect" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none cursor-pointer">
+                <option value="">먼저 [저장된 날짜 조회]를 누르세요</option>
+              </select>
+            </div>
+            <div>
+              <label for="historyTokenInput" class="block font-medium mb-1">허용 토큰 (설정 시트에 입력한 경우)</label>
+              <input id="historyTokenInput" type="text" placeholder="선택 사항 (?token=...)" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="historyDatesBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-semibold cursor-pointer">저장된 날짜 조회</button>
+          <button id="historyLoadBtn" class="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold cursor-pointer">선택 날짜 히스토리 재생</button>
+          <button id="historyStopBtn" class="hidden px-3 py-1.5 rounded-lg bg-[#dc2626] text-white font-semibold cursor-pointer">히스토리 종료</button>
+          <button id="historyDemoBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">샘플 히스토리 체험</button>
+        </div>
+
+        <div id="historyStatusBox" class="hidden p-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] leading-relaxed"></div>
+
+        <div class="rounded-lg border border-[var(--card-border)] bg-[var(--background)] p-2.5 text-[11px] text-[var(--muted-foreground)] leading-relaxed">
+          <strong class="text-[var(--foreground)]">설치 방법:</strong> 저장소의 <code>gas/Code.gs</code>를 Google 스프레드시트 <em>확장 프로그램 → Apps Script</em>에 붙여넣고, <code>gas/README.md</code> 안내대로 트리거·웹 앱을 배포하면 본인 드라이브에 15분마다 자동 누적됩니다.
+        </div>
       </div>
 
       <div id="tabFilePanel" class="hidden py-3 space-y-3">
@@ -1106,6 +1164,13 @@
       tickAcc: 0, burstAcc: 0,
     };
 
+    const historyState = {
+      active: false, date: "", times: [], timeHours: [], snapshots: {},
+      currentIdx: -1, currentTime: "", sourceLabel: "",
+    };
+    let liveSpots = [];
+    let crowdFilter = "all";
+
     const HOUR_PHASES_WD = [
       "심야 저점", "심야 안정", "새벽 최저점", "새벽 최저점", "이른 새벽", "출근 준비",
       "조기 출근 시작", "출근 급증기", "오전 출근 피크", "업무지구 집중", "오전 업무 피크", "오전 후반",
@@ -1158,7 +1223,7 @@
     }
     function getCellMetrics(cIdx, hourFloat, dayKey) {
       const m = getMetricsFromArray(dayKey === "wd" ? cellWd : cellWe, cIdx * 24, dayKey === "wd" ? cellAvgWd[cIdx] : cellAvgWe[cIdx], hourFloat);
-      if (liveState.enabled) {
+      if (liveState.enabled || historyState.active) {
         const cur = m.cur * liveBurstMul[cIdx], prev = m.prev * liveBurstPrev[cIdx];
         const deltaAbs = cur - prev;
         return { cur, prev, avg: m.avg, deltaAbs, deltaPct: prev > 0.0005 ? (deltaAbs / prev) * 100 : 0, vsAvg: m.avg > 0.0005 ? ((cur - m.avg) / m.avg) * 100 : 0 };
@@ -1473,7 +1538,7 @@
 
           ensureMicroCapacity(visCount * 7);
           const bCur = cubicBasis(state.hour), bPrev = cubicBasis(state.hour - getDeltaStepHours());
-          const dayKey = state.day, mode = state.metric, useLive = liveState.enabled;
+          const dayKey = state.day, mode = state.metric, useLive = liveState.enabled || historyState.active;
           let count = 0;
 
           for (let v = 0; v < visCount; v++) {
@@ -1542,7 +1607,7 @@
       const arr = state.day === "wd" ? cellWd : cellWe;
       const avgArr = state.day === "wd" ? cellAvgWd : cellAvgWe;
       const metricMode = state.metric;
-      const useLive = liveState.enabled;
+      const useLive = liveState.enabled || historyState.active;
       const fSido = state.filterSido;
       const pulseCut = state.timeStepMin === 15 ? 3.5 : 14.0;
       const rawPulse = [];
@@ -1901,6 +1966,49 @@
         }
       }
 
+      // Real-time / Drive History Crowd & ITS Hotspot Pins
+      if (liveSpots.length > 0) {
+        const spotFont = "600 10.5px -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif";
+        vctx.font = spotFont;
+        vctx.textAlign = "left";
+        vctx.textBaseline = "middle";
+        const placedSpots = [];
+        for (let i = 0; i < liveSpots.length; i++) {
+          const sp = liveSpots[i];
+          if (crowdFilter !== "all" && sp.source !== crowdFilter) continue;
+          const [sx, sy] = worldToScreen(sp.wx, sp.wy);
+          if (sx < -40 || sx > w + 40 || sy < -20 || sy > h + 20) continue;
+          const clr = sp.congest === "붐빔" || sp.congest === "정체" ? "#dc2626"
+            : sp.congest === "약간 붐빔" || sp.congest === "서행" ? "#ea580c"
+              : sp.congest === "보통" ? "#d97706" : "#16a34a";
+          // Draw pin dot
+          vctx.beginPath(); vctx.arc(sx, sy, 4.2, 0, Math.PI * 2);
+          vctx.fillStyle = clr; vctx.fill();
+          vctx.lineWidth = 1.6; vctx.strokeStyle = light ? "#ffffff" : "#0f141b"; vctx.stroke();
+
+          // Collision-avoided label pill
+          const valStr = sp.pop > 0 ? `${(sp.pop / 10000).toFixed(1)}만` : sp.speed > 0 ? `${Math.round(sp.speed)}km/h` : sp.congest;
+          const lbl = `${sp.name.split("·")[0]} ${valStr}`;
+          const tw = measureCached(vctx, spotFont, lbl) + 12;
+          const bx = sx + 7, by = sy - 9, bh = 18;
+          let overlap = false;
+          for (let j = 0; j < placedSpots.length; j++) {
+            const p = placedSpots[j];
+            if (!(bx + tw + 4 < p[0] || bx > p[0] + p[2] + 4 || by + bh + 3 < p[1] || by > p[1] + p[3] + 3)) { overlap = true; break; }
+          }
+          if (overlap) continue;
+          placedSpots.push([bx, by, tw, bh]);
+          vctx.fillStyle = light ? "rgba(255,255,255,0.92)" : "rgba(15,23,42,0.90)";
+          vctx.strokeStyle = clr;
+          vctx.lineWidth = 1.2;
+          vctx.beginPath();
+          if (vctx.roundRect) vctx.roundRect(bx, by, tw, bh, 5); else vctx.rect(bx, by, tw, bh);
+          vctx.fill(); vctx.stroke();
+          vctx.fillStyle = light ? "#0f172a" : "#f8fafc";
+          vctx.fillText(lbl, bx + 6, sy);
+        }
+      }
+
       vctx.restore();
       state.dirtyVec = false;
     }
@@ -2203,7 +2311,10 @@
 
       document.getElementById("kpiScopeTitle").textContent = fSido === -1 ? "대한민국 전국 실시간 요약" : `${SIDOS[fSido].name} 실시간 요약`;
       document.getElementById("clockTime").textContent = clockStr;
-      if (liveState.enabled) {
+      if (historyState.active) {
+        document.getElementById("clockPhase").textContent = `Drive 히스토리 · ${historyState.date} (${historyState.currentTime || clockStr})`;
+        document.getElementById("kpiTimeBadge").textContent = `📅 ${historyState.date} ${historyState.currentTime || clockStr}`;
+      } else if (liveState.enabled) {
         document.getElementById("clockPhase").textContent = liveState.source === "api" ? `LIVE API (${liveState.lastSyncStr || "동기화"})` : "LIVE KST · 실시간 추정";
         document.getElementById("kpiTimeBadge").textContent = `● LIVE ${dayLabel} ${clockStr}`;
       } else {
@@ -2581,6 +2692,7 @@
         if (state.playing) {
           const rate = state.timeStepMin === 15 ? 0.85 : 1.45;
           state.hour = (state.hour + dt * rate * state.speed) % 24;
+          if (historyState.active) applyHistoryAtHour(state.hour);
           syncSliderFromHour();
           markTimeDirty();
           uiThrottle += dt;
@@ -2857,6 +2969,7 @@
     function setHour(h) {
       if (liveState.enabled) disableLiveMode();
       state.hour = ((h % 24) + 24) % 24;
+      if (historyState.active) applyHistoryAtHour(state.hour);
       syncSliderFromHour(); markTimeDirty(); updateSidebar(); drawTimelineWave();
     }
     function syncPresetChips(h) { document.querySelectorAll("[data-preset]").forEach((b) => b.classList.toggle("active", Math.abs(Number(b.dataset.preset) - h) < 0.13)); }
@@ -2911,7 +3024,10 @@
 
     function updateLiveButtonUI() {
       const btn = document.getElementById("liveBtn"), dot = document.getElementById("liveDot"), tag = document.getElementById("dataSourceTag");
-      if (liveState.enabled) {
+      if (historyState.active) {
+        btn.style.background = ""; btn.style.borderColor = ""; btn.style.color = ""; dot.style.background = "";
+        tag.textContent = `Drive 히스토리 · ${historyState.date}`;
+      } else if (liveState.enabled) {
         btn.style.background = "#dc2626"; btn.style.borderColor = "#dc2626"; btn.style.color = "#ffffff"; dot.style.background = "#ffffff";
         tag.textContent = liveState.source === "api" ? `LIVE API · ${liveState.intervalSec}초 폴링` : "LIVE KST · 전국 실시간 추정";
       } else {
@@ -2954,9 +3070,25 @@
       markTimeDirty(); updateSidebar();
     }
 
+    function exitHistoryMode(redraw = true) {
+      if (!historyState.active) return;
+      historyState.active = false;
+      historyState.date = ""; historyState.times = []; historyState.timeHours = []; historyState.snapshots = {};
+      historyState.currentIdx = -1; historyState.currentTime = ""; historyState.sourceLabel = "";
+      liveSpots = [];
+      liveBurstMul.fill(1.0); liveBurstPrev.fill(1.0);
+      document.getElementById("historyStopBtn").classList.add("hidden");
+      renderCrowdPanel();
+      updateLiveButtonUI();
+      if (redraw) { markTimeDirty(); state.dirtyVec = true; updateSidebar(); drawTimelineWave(); }
+    }
+
     function enableLiveKstMode() {
       if (state.playing) togglePlay();
+      exitHistoryMode(false);
       stopApiPolling(false);
+      liveSpots = [];
+      renderCrowdPanel();
       liveState.enabled = true; liveState.source = "kst"; liveState.tickAcc = 0; liveState.burstAcc = 0;
       liveBurstMul.fill(1.0); liveBurstPrev.fill(1.0);
       updateLiveButtonUI(); syncKstClock(true); stepLiveKstBursts();
@@ -2964,8 +3096,12 @@
     function disableLiveMode() {
       stopApiPolling(false);
       liveState.enabled = false; liveState.source = "kst";
-      liveBurstMul.fill(1.0); liveBurstPrev.fill(1.0);
-      updateLiveButtonUI(); markTimeDirty(); updateSidebar(); drawTimelineWave();
+      if (!historyState.active) {
+        liveSpots = [];
+        liveBurstMul.fill(1.0); liveBurstPrev.fill(1.0);
+        renderCrowdPanel();
+      }
+      updateLiveButtonUI(); markTimeDirty(); state.dirtyVec = true; updateSidebar(); drawTimelineWave();
     }
     document.getElementById("liveBtn").addEventListener("click", () => { if (liveState.enabled) disableLiveMode(); else enableLiveKstMode(); });
 
@@ -2973,20 +3109,29 @@
     const apiStatusBox = document.getElementById("apiStatusBox"), apiUrlInput = document.getElementById("apiUrlInput");
     const apiAuthInput = document.getElementById("apiAuthInput"), apiIntervalSelect = document.getElementById("apiIntervalSelect");
     const apiStartBtn = document.getElementById("apiStartBtn"), apiStopBtn = document.getElementById("apiStopBtn");
+    const historyUrlInput = document.getElementById("historyUrlInput"), historyTokenInput = document.getElementById("historyTokenInput");
+    const historyDateSelect = document.getElementById("historyDateSelect"), historyStatusBox = document.getElementById("historyStatusBox");
+    const historyStopBtn = document.getElementById("historyStopBtn");
     const dropZone = document.getElementById("dropZone"), fileInput = document.getElementById("fileInput");
 
     function setModalTab(tab) {
-      const isApi = tab === "api";
-      document.getElementById("tabApiBtn").classList.toggle("active", isApi);
-      document.getElementById("tabFileBtn").classList.toggle("active", !isApi);
-      document.getElementById("tabApiPanel").classList.toggle("hidden", !isApi);
-      document.getElementById("tabFilePanel").classList.toggle("hidden", isApi);
+      document.getElementById("tabApiBtn").classList.toggle("active", tab === "api");
+      document.getElementById("tabHistoryBtn").classList.toggle("active", tab === "history");
+      document.getElementById("tabFileBtn").classList.toggle("active", tab === "file");
+      document.getElementById("tabApiPanel").classList.toggle("hidden", tab !== "api");
+      document.getElementById("tabHistoryPanel").classList.toggle("hidden", tab !== "history");
+      document.getElementById("tabFilePanel").classList.toggle("hidden", tab !== "file");
     }
     document.getElementById("tabApiBtn").addEventListener("click", () => setModalTab("api"));
+    document.getElementById("tabHistoryBtn").addEventListener("click", () => setModalTab("history"));
     document.getElementById("tabFileBtn").addEventListener("click", () => setModalTab("file"));
+    apiUrlInput.addEventListener("input", () => { historyUrlInput.value = apiUrlInput.value; });
+    historyUrlInput.addEventListener("input", () => { apiUrlInput.value = historyUrlInput.value; });
     try {
-      const u = localStorage.getItem("kr_live_api_url"), iv = localStorage.getItem("kr_live_api_interval");
-      if (u) apiUrlInput.value = u; if (iv) apiIntervalSelect.value = iv;
+      const u = localStorage.getItem("kr_live_api_url"), iv = localStorage.getItem("kr_live_api_interval"), tk = localStorage.getItem("kr_gas_token");
+      if (u) { apiUrlInput.value = u; historyUrlInput.value = u; }
+      if (iv) apiIntervalSelect.value = iv;
+      if (tk) historyTokenInput.value = tk;
     } catch (_) {}
 
     document.getElementById("openUploadBtn").addEventListener("click", () => uploadModal.classList.remove("hidden"));
@@ -3017,7 +3162,137 @@
       microCache.clear(); buildHexCells();
     }
 
+    // Build URL safely (no custom headers on Google Apps Script URLs to avoid CORS preflight)
+    function buildGasUrl(baseUrl, params) {
+      const u = new URL(baseUrl);
+      for (const [k, v] of Object.entries(params || {})) {
+        if (v !== undefined && v !== null && String(v).trim() !== "") u.searchParams.set(k, String(v).trim());
+      }
+      return u.toString();
+    }
+
+    function congestBadgeHtml(lvl) {
+      if (lvl === "붐빔" || lvl === "정체") return `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#dc2626]/15 text-[#dc2626] shrink-0">${lvl}</span>`;
+      if (lvl === "약간 붐빔" || lvl === "서행") return `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#ea580c]/15 text-[#ea580c] shrink-0">${lvl}</span>`;
+      if (lvl === "보통") return `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#d97706]/15 text-[#d97706] shrink-0">${lvl}</span>`;
+      return `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#16a34a]/15 text-[#16a34a] shrink-0">${lvl || "원활"}</span>`;
+    }
+
+    function renderCrowdPanel() {
+      const box = document.getElementById("liveCrowdBox");
+      if (!liveSpots || liveSpots.length === 0) { box.classList.add("hidden"); return; }
+      box.classList.remove("hidden");
+      const titleEl = document.getElementById("liveCrowdTitle");
+      const dotEl = document.getElementById("liveCrowdDot");
+      const metaEl = document.getElementById("liveCrowdMeta");
+      if (historyState.active) {
+        dotEl.style.background = "#2563eb";
+        titleEl.textContent = `히스토리 혼잡 TOP (${historyState.date})`;
+        metaEl.textContent = `${historyState.currentTime} · ${liveSpots.length}곳`;
+      } else {
+        dotEl.style.background = "#dc2626";
+        titleEl.textContent = "실시간 유동인구·혼잡 TOP";
+        metaEl.textContent = `${liveState.lastSyncStr || "실측"} · ${liveSpots.length}곳`;
+      }
+      const list = liveSpots.filter((s) => crowdFilter === "all" || s.source === crowdFilter).slice(0, 20);
+      document.getElementById("liveCrowdList").innerHTML = list.length === 0
+        ? `<div class="text-[11px] text-[var(--muted-foreground)] py-2 text-center">해당 분류의 실측 데이터가 없습니다.</div>`
+        : list.map((sp, idx) => {
+          const valTxt = sp.pop > 0 ? `${(sp.pop / 10000).toFixed(1)}만명` : sp.speed > 0 ? `${sp.speed.toFixed(0)} km/h` : `${sp.traffic_gbps.toFixed(1)}G`;
+          const srcTag = sp.source === "seoul_pop" ? "서울 인파" : sp.source === "its" ? "전국 ITS" : "실측";
+          return `<button type="button" data-spot-wx="${sp.wx}" data-spot-wy="${sp.wy}" data-spot-src="${sp.source}" class="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] border border-[var(--card-border)] text-left cursor-pointer transition-colors">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="text-[11px] font-mono text-[var(--muted-foreground)] w-4 shrink-0">${idx + 1}</span>
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-[var(--foreground)] truncate">${sp.name}</div>
+                <div class="text-[10px] text-[var(--muted-foreground)]">${srcTag} · ${valTxt}</div>
+              </div>
+            </div>
+            ${congestBadgeHtml(sp.congest)}
+          </button>`;
+        }).join("");
+    }
+
+    document.querySelectorAll("[data-crowd-filter]").forEach((btn) => btn.addEventListener("click", () => {
+      crowdFilter = btn.dataset.crowdFilter;
+      document.querySelectorAll("[data-crowd-filter]").forEach((b) => b.classList.toggle("active", b === btn));
+      renderCrowdPanel();
+      state.dirtyVec = true;
+    }));
+    document.getElementById("exitCrowdModeBtn").addEventListener("click", () => {
+      if (historyState.active) exitHistoryMode(true);
+      else disableLiveMode();
+    });
+    document.getElementById("liveCrowdList").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-spot-wx]");
+      if (!btn) return;
+      const wx = Number(btn.dataset.spotWx), wy = Number(btn.dataset.spotWy), src = btn.dataset.spotSrc;
+      const pad = src === "seoul_pop" ? 36 : 95;
+      fitCameraToBBox([wx - pad, wy - pad, wx + pad, wy + pad], true, 0.08);
+      if (window.innerWidth < 1024) closeMobileSidebar();
+    });
+
+    // Apply coordinate spots (Seoul Pop + Nationwide ITS) radially into hex burst buffer
+    function applyCoordinateSpotsToBurst(arr, targetBuf, dayKey, hourFloat) {
+      targetBuf.fill(1.0);
+      const spots = [];
+      const rankMap = { "붐빔": 4, "정체": 4, "약간 붐빔": 3, "서행": 3, "보통": 2, "여유": 1, "원활": 1 };
+      for (let idx = 0; idx < arr.length; idx++) {
+        const r = arr[idx];
+        const lon = parseFloat(r.lon), lat = parseFloat(r.lat);
+        if (isNaN(lon) || isNaN(lat)) continue;
+        const v = parseFloat(r.traffic_gbps ?? r.traffic ?? r.value ?? r.gbps);
+        const pop = Number(r.pop || 0), speed = Number(r.speed || 0);
+        const src = String(r.source || (pop > 0 ? "seoul_pop" : speed > 0 ? "its" : "api"));
+        const congest = String(r.congest || "").trim();
+        const [wx, wy] = lonLatToWorld(lon, lat);
+        const cid = hitTestHexBase(wx, wy);
+        if (cid !== -1 && !isNaN(v) && v >= 0) {
+          const baseV = evalCurve24(dayKey === "wd" ? cellWd : cellWe, cid * 24, hourFloat);
+          let mul = Math.max(0.25, Math.min(4.5, v / Math.max(0.15, baseV)));
+          if (congest === "붐빔" || congest === "정체") mul = Math.max(mul, 1.38);
+          else if (congest === "약간 붐빔" || congest === "서행") mul = Math.max(mul, 1.18);
+          else if (congest === "여유" || congest === "원활") mul = Math.min(mul, 0.88);
+          // Blend smoothly into nearby hex neighborhood
+          const span = src === "its" ? 3 : 2;
+          const sigma = src === "its" ? HEX_DX * 2.1 : HEX_DX * 1.15;
+          const approxRow = Math.round(wy / HEX_DY);
+          for (let rr = approxRow - span; rr <= approxRow + span; rr++) {
+            if (rr < 0) continue;
+            const xOff = (rr & 1) ? HEX_DX * 0.5 : 0;
+            const approxCol = Math.round((wx - xOff) / HEX_DX);
+            for (let cc = approxCol - span; cc <= approxCol + span; cc++) {
+              const nid = cellByKey.get((rr << 10) | cc);
+              if (nid === undefined) continue;
+              const dx = wx - cellXY[nid * 2], dy = wy - cellXY[nid * 2 + 1];
+              const w = Math.exp(-0.5 * (dx * dx + dy * dy) / (sigma * sigma));
+              if (w < 0.08) continue;
+              const blended = 1.0 + (mul - 1.0) * w;
+              if (Math.abs(blended - 1.0) > Math.abs(targetBuf[nid] - 1.0)) targetBuf[nid] = blended;
+            }
+          }
+        }
+        spots.push({
+          lon, lat, wx, wy,
+          name: String(r.name || r.code || "지점"),
+          code: String(r.code || ""),
+          source: src,
+          pop,
+          speed,
+          congest: congest || (src === "its" ? "원활" : "보통"),
+          traffic_gbps: isNaN(v) ? 0 : v,
+        });
+      }
+      spots.sort((a, b) => {
+        const ra = rankMap[a.congest] || 0, rb = rankMap[b.congest] || 0;
+        if (rb !== ra) return rb - ra;
+        return (b.pop || b.traffic_gbps * 1000) - (a.pop || a.traffic_gbps * 1000);
+      });
+      return spots;
+    }
+
     function applyLiveApiPayload(parsed) {
+      if (parsed && parsed.error) throw new Error(parsed.error);
       const arr = Array.isArray(parsed) ? parsed : (parsed.data || parsed.rows || parsed.items || parsed.cells || []);
       if (!Array.isArray(arr) || arr.length === 0) throw new Error("JSON 배열 데이터가 비어 있습니다.");
       if (arr.some((r) => r.hour !== undefined && r.hour !== null && r.hour !== "")) {
@@ -3025,22 +3300,20 @@
       }
       const kst = getKstNow(), dayKey = kst.isWeekend ? "we" : "wd", curHr = kst.hh;
       liveBurstPrev.set(liveBurstMul);
+      const hasCoords = arr.some((r) => r.lon !== undefined && r.lat !== undefined);
       let matchedDongs = 0, matchedCoords = 0;
-      const dongScaleUpdate = new Map();
 
+      if (hasCoords) {
+        const spots = applyCoordinateSpotsToBurst(arr, liveBurstMul, dayKey, kst.hourFloat);
+        matchedCoords = spots.length;
+        liveSpots = spots;
+      }
+
+      const dongScaleUpdate = new Map();
       for (const r of arr) {
+        if (r.lon !== undefined && r.lat !== undefined) continue;
         const v = parseFloat(r.traffic_gbps ?? r.traffic ?? r.value ?? r.gbps);
         if (isNaN(v) || v < 0) continue;
-        if (r.lon !== undefined && r.lat !== undefined) {
-          const [wx, wy] = lonLatToWorld(parseFloat(r.lon), parseFloat(r.lat));
-          const cid = hitTestHexBase(wx, wy);
-          if (cid !== -1) {
-            const baseV = evalCurve24(dayKey === "wd" ? cellWd : cellWe, cid * 24, kst.hourFloat);
-            liveBurstMul[cid] = Math.max(0.1, Math.min(8.0, v / Math.max(0.05, baseV)));
-            matchedCoords++;
-          }
-          continue;
-        }
         let d = null;
         if (r.adm_cd) d = dongByCd.get(String(r.adm_cd).trim()) || dongByCd.get(String(r.adm_cd).trim().slice(0, 8));
         if (!d && r.sggnm && r.dongnm) d = dongByFull.get((String(r.sggnm) + "|" + String(r.dongnm)).replace(/\s+/g, ""));
@@ -3055,26 +3328,42 @@
         for (let i = 0; i < HEX_COUNT; i++) { const ratio = dongScaleUpdate.get(cellDong[i]); if (ratio !== undefined) liveBurstMul[i] = ratio; }
         recomputeAggregates();
       }
-      return { matched: matchedDongs + matchedCoords, mode: matchedCoords > 0 ? "셀 좌표" : "행정동 스냅샷" };
+      // If GAS also included available dates, pre-populate History dropdown!
+      if (parsed && Array.isArray(parsed.dates) && parsed.dates.length > 0 && historyDateSelect.options.length <= 1) {
+        historyDateSelect.innerHTML = parsed.dates.map((d) => `<option value="${d}">${d}</option>`).join("");
+      }
+      renderCrowdPanel();
+      state.dirtyVec = true;
+      return { matched: matchedDongs + matchedCoords, mode: matchedCoords > 0 ? "실측 유동인구·ITS" : "행정동 스냅샷" };
     }
 
     async function fetchExternalApiOnce() {
-      const url = apiUrlInput.value.trim();
-      if (!url) { apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">API URL을 입력해 주세요.</span>`; return false; }
-      const headers = { Accept: "application/json" };
+      const rawUrl = apiUrlInput.value.trim();
+      if (!rawUrl) { apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">API URL을 입력해 주세요.</span>`; return false; }
       const authRaw = apiAuthInput.value.trim();
-      if (authRaw) { const c = authRaw.indexOf(":"); if (c > 0) headers[authRaw.slice(0, c).trim()] = authRaw.slice(c + 1).trim(); else headers["Authorization"] = authRaw; }
+      const isGas = rawUrl.includes("script.google.com") || rawUrl.includes("script.googleusercontent.com");
+      let reqUrl = rawUrl;
+      const fetchOpts = { cache: "no-store" };
+      if (isGas) {
+        reqUrl = buildGasUrl(rawUrl, { mode: "latest", token: authRaw && !authRaw.includes(":") ? authRaw : historyTokenInput.value.trim() });
+      } else {
+        const headers = { Accept: "application/json" };
+        if (authRaw) { const c = authRaw.indexOf(":"); if (c > 0) headers[authRaw.slice(0, c).trim()] = authRaw.slice(c + 1).trim(); else headers["Authorization"] = authRaw; }
+        fetchOpts.headers = headers;
+      }
       apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="text-[var(--muted-foreground)]">데이터 수신 중...</span>`;
       try {
-        const resp = await fetch(url, { headers, cache: "no-store" });
+        const resp = await fetch(reqUrl, fetchOpts);
         if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
-        const res = applyLiveApiPayload(await resp.json());
+        const json = await resp.json();
+        const res = applyLiveApiPayload(json);
         const kst = getKstNow();
-        liveState.pollCount++; liveState.lastSyncStr = kst.hhmmss; liveState.kstClockStr = kst.hhmmss;
+        liveState.pollCount++; liveState.lastSyncStr = json.updated_at ? String(json.updated_at).slice(-5) : kst.hhmmss; liveState.kstClockStr = kst.hhmmss;
+        renderCrowdPanel();
         apiStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">수신 성공 (${kst.hhmmss} KST · #${liveState.pollCount})</span><br/>${res.matched.toLocaleString()}개 항목(${res.mode})이 전국 지도에 실시간 반영되었습니다.`;
         syncKstClock(true); return true;
       } catch (err) {
-        apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">연결 실패:</span> ${err.message}<br/><span class="text-[var(--muted-foreground)]">외부 서버의 CORS 허용 헤더를 확인해 주세요.</span>`;
+        apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">연결 실패:</span> ${err.message}<br/><span class="text-[var(--muted-foreground)]">GAS 웹 앱 배포 권한(모든 사용자) 또는 CORS 설정을 확인해 주세요.</span>`;
         return false;
       }
     }
@@ -3091,6 +3380,7 @@
       const sec = Math.max(5, parseInt(apiIntervalSelect.value, 10) || 30);
       try { localStorage.setItem("kr_live_api_url", url); localStorage.setItem("kr_live_api_interval", String(sec)); } catch (_) {}
       if (state.playing) togglePlay();
+      exitHistoryMode(false);
       stopApiPolling(false);
       liveState.enabled = true; liveState.source = "api"; liveState.apiUrl = url; liveState.intervalSec = sec; liveState.pollCount = 0;
       liveBurstMul.fill(1.0); liveBurstPrev.fill(1.0);
@@ -3102,6 +3392,163 @@
     apiStopBtn.addEventListener("click", () => { disableLiveMode(); apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="font-semibold">실시간 API 폴링이 중지되었습니다.</span>`; });
     document.getElementById("apiTestBtn").addEventListener("click", () => fetchExternalApiOnce());
     document.getElementById("apiDemoKstBtn").addEventListener("click", () => { enableLiveKstMode(); uploadModal.classList.add("hidden"); });
+
+    // -----------------------------------------------------------------------
+    // Google Drive History Loader & 24h Timeline Replay Engine
+    // -----------------------------------------------------------------------
+    function parseHmToHour(hm) {
+      const parts = String(hm || "").split(":");
+      return (parseInt(parts[0], 10) || 0) + (parseInt(parts[1], 10) || 0) / 60;
+    }
+
+    function applyHistoryAtHour(hourFloat) {
+      if (!historyState.active || historyState.times.length === 0) return;
+      let bestIdx = 0, bestDiff = 999;
+      for (let i = 0; i < historyState.timeHours.length; i++) {
+        const d = Math.abs(historyState.timeHours[i] - hourFloat);
+        if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+      }
+      if (bestIdx === historyState.currentIdx) return;
+      historyState.currentIdx = bestIdx;
+      const curKey = historyState.times[bestIdx];
+      const prevKey = historyState.times[Math.max(0, bestIdx - 1)];
+      historyState.currentTime = curKey;
+
+      const curArr = historyState.snapshots[curKey] || [];
+      const prevArr = historyState.snapshots[prevKey] || curArr;
+      if (prevKey !== curKey) {
+        applyCoordinateSpotsToBurst(prevArr, liveBurstPrev, state.day, historyState.timeHours[Math.max(0, bestIdx - 1)]);
+      } else {
+        liveBurstPrev.fill(1.0);
+      }
+      liveSpots = applyCoordinateSpotsToBurst(curArr, liveBurstMul, state.day, historyState.timeHours[bestIdx]);
+      renderCrowdPanel();
+      state.dirtyVec = true;
+    }
+
+    function activateHistoryDataset(payload, label) {
+      if (!payload || !Array.isArray(payload.times) || payload.times.length === 0) {
+        throw new Error("선택한 날짜에 저장된 히스토리 스냅샷이 없습니다.");
+      }
+      if (state.playing) togglePlay();
+      stopApiPolling(false);
+      liveState.enabled = false;
+      historyState.active = true;
+      historyState.date = payload.date;
+      historyState.times = payload.times;
+      historyState.timeHours = payload.times.map(parseHmToHour);
+      historyState.snapshots = payload.snapshots || {};
+      historyState.currentIdx = -1;
+      historyState.sourceLabel = label || "Google Drive";
+      // Match weekday/weekend from date
+      const dt = new Date(payload.date + "T12:00:00+09:00");
+      const isWe = dt.getDay() === 0 || dt.getDay() === 6;
+      state.day = isWe ? "we" : "wd";
+      document.querySelectorAll("[data-day]").forEach((b) => b.classList.toggle("active", b.dataset.day === state.day));
+      // Jump to latest or mid-day snapshot
+      const initIdx = historyState.timeHours.length - 1;
+      state.hour = historyState.timeHours[initIdx];
+      applyHistoryAtHour(state.hour);
+      historyStopBtn.classList.remove("hidden");
+      updateLiveButtonUI();
+      syncSliderFromHour(); markTimeDirty(); updateSidebar(); drawTimelineWave();
+    }
+
+    document.getElementById("historyDatesBtn").addEventListener("click", async () => {
+      const url = historyUrlInput.value.trim();
+      if (!url) { historyStatusBox.classList.remove("hidden"); historyStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">Google Apps Script 웹 앱 URL을 입력해 주세요.</span>`; return; }
+      const token = historyTokenInput.value.trim();
+      try { localStorage.setItem("kr_live_api_url", url); localStorage.setItem("kr_gas_token", token); } catch (_) {}
+      historyStatusBox.classList.remove("hidden"); historyStatusBox.innerHTML = `<span class="text-[var(--muted-foreground)]">Google Drive 저장 날짜 조회 중...</span>`;
+      try {
+        const resp = await fetch(buildGasUrl(url, { mode: "dates", token }), { cache: "no-store" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        if (json.error) throw new Error(json.error);
+        const dates = json.dates || [];
+        if (dates.length === 0) {
+          historyDateSelect.innerHTML = `<option value="">저장된 히스토리가 아직 없습니다</option>`;
+          historyStatusBox.innerHTML = `<span class="font-semibold">아직 누적된 날짜가 없습니다.</span> 스프레드시트에서 먼저 [지금 1회 수집 실행]을 진행해 주세요.`;
+          return;
+        }
+        historyDateSelect.innerHTML = dates.map((d) => `<option value="${d.date}">${d.date} (${d.snapshots}회 수집 · ${d.rows.toLocaleString()}건)</option>`).join("");
+        historyStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">총 ${dates.length}일치 히스토리를 찾았습니다.</span> 날짜를 선택하고 [선택 날짜 히스토리 재생]을 누르세요.`;
+      } catch (err) {
+        historyStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">조회 실패:</span> ${err.message}`;
+      }
+    });
+
+    document.getElementById("historyLoadBtn").addEventListener("click", async () => {
+      const url = historyUrlInput.value.trim();
+      const dateStr = historyDateSelect.value;
+      if (!url || !dateStr) { historyStatusBox.classList.remove("hidden"); historyStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">URL을 입력하고 저장된 날짜를 먼저 선택해 주세요.</span>`; return; }
+      const token = historyTokenInput.value.trim();
+      historyStatusBox.classList.remove("hidden"); historyStatusBox.innerHTML = `<span class="text-[var(--muted-foreground)]">${dateStr} 히스토리 로딩 중...</span>`;
+      try {
+        const resp = await fetch(buildGasUrl(url, { mode: "history", date: dateStr, token }), { cache: "no-store" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        if (json.error) throw new Error(json.error);
+        activateHistoryDataset(json, "Google Drive");
+        historyStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">${dateStr} 히스토리 로드 완료!</span> (${json.times.length}개 시각) 하단 타임라인을 움직여 과거 인파·혼잡도를 재생하세요.`;
+        uploadModal.classList.add("hidden");
+      } catch (err) {
+        historyStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">불러오기 실패:</span> ${err.message}`;
+      }
+    });
+
+    historyStopBtn.addEventListener("click", () => {
+      exitHistoryMode(true);
+      historyStatusBox.classList.remove("hidden");
+      historyStatusBox.innerHTML = `<span class="font-semibold">히스토리 모드를 종료하고 기본 전국 모델로 복귀했습니다.</span>`;
+    });
+
+    // Built-in 1-day Demo History (Seoul real hotspots + Nationwide ITS) to test Drive History UX immediately
+    document.getElementById("historyDemoBtn").addEventListener("click", () => {
+      const demoDate = new Date().toISOString().slice(0, 10);
+      const demoSpots = [
+        ["seoul_pop", "POI014", "강남역", 127.0276, 37.4979, 68000, 13.5, 4.5],
+        ["seoul_pop", "POI007", "홍대 관광특구", 126.9237, 37.5559, 64000, 19.0, 4.0],
+        ["seoul_pop", "POI050", "잠실역", 127.1001, 37.5133, 62000, 16.0, 4.2],
+        ["seoul_pop", "POI003", "명동 관광특구", 126.9849, 37.5636, 52000, 15.0, 3.8],
+        ["seoul_pop", "POI068", "성수카페거리", 127.0558, 37.5445, 48000, 16.5, 3.5],
+        ["seoul_pop", "POI072", "여의도", 126.9245, 37.5219, 55000, 12.0, 3.6],
+        ["seoul_pop", "POI009", "광화문·덕수궁", 126.9768, 37.5698, 44000, 13.0, 4.0],
+        ["seoul_pop", "POI017", "고속터미널역", 127.0049, 37.5049, 51000, 17.5, 4.2],
+        ["seoul_pop", "POI033", "서울역", 126.9707, 37.5547, 46000, 17.0, 4.6],
+        ["seoul_pop", "POI015", "건대입구역", 127.0695, 37.5404, 42000, 19.5, 3.8],
+        ["its", "ITS_GG_PG", "경기 판교·분당", 127.1100, 37.3940, 0, 18.0, 3.5],
+        ["its", "ITS_GG_SW", "경기 수원·광교", 127.0320, 37.2740, 0, 18.0, 3.8],
+        ["its", "ITS_ICN_BP", "인천 부평·구월 도심", 126.7160, 37.4710, 0, 17.5, 4.0],
+        ["its", "ITS_BS_SM", "부산 서면·도심", 129.0596, 35.1578, 0, 17.5, 4.0],
+        ["its", "ITS_BS_HU", "부산 해운대·센텀", 129.1586, 35.1631, 0, 15.0, 4.5],
+        ["its", "ITS_DG_DS", "대구 동성로·수성", 128.6014, 35.8714, 0, 17.0, 4.0],
+        ["its", "ITS_DJ_DS", "대전 둔산·유성", 127.3845, 36.3504, 0, 17.5, 3.8],
+        ["its", "ITS_GJ_SM", "광주 상무·충장", 126.8526, 35.1595, 0, 17.5, 4.0],
+        ["its", "ITS_JJ_CT", "제주 제주시·공항", 126.5100, 33.4996, 0, 14.5, 4.5],
+      ];
+      const times = [], snapshots = {};
+      for (let h = 0; h < 24; h++) {
+        const hm = `${String(h).padStart(2, "0")}:00`;
+        times.push(hm);
+        snapshots[hm] = demoSpots.map(([src, code, name, lon, lat, peakPop, peakH, spread]) => {
+          const wave = Math.exp(-0.5 * Math.pow((h - peakH) / spread, 2));
+          const morning = Math.exp(-0.5 * Math.pow((h - 8.5) / 1.8, 2)) * 0.65;
+          const intensity = Math.min(1, 0.14 + Math.max(wave, morning) * 0.86);
+          if (src === "seoul_pop") {
+            const pop = Math.round(peakPop * intensity);
+            const congest = pop >= 50000 ? "붐빔" : pop >= 35000 ? "약간 붐빔" : pop >= 18000 ? "보통" : "여유";
+            return { source: src, code, name, lon, lat, pop, congest, speed: 0, traffic_gbps: Number((pop / 1350).toFixed(2)) };
+          }
+          const speed = Number((64 - intensity * 42).toFixed(1));
+          const congest = speed < 26 ? "정체" : speed < 42 ? "서행" : "원활";
+          return { source: src, code, name, lon, lat, pop: 0, congest, speed, traffic_gbps: Number((8 + intensity * 18).toFixed(2)) };
+        });
+      }
+      activateHistoryDataset({ mode: "history", date: demoDate, times, snapshots }, "샘플 히스토리");
+      setHour(18.0);
+      uploadModal.classList.add("hidden");
+    });
 
     function applyUploadedRecords(records, filename) {
       const matchedDongs = new Set(); let updatedCells = 0;
@@ -3165,12 +3612,14 @@
     });
 
     document.getElementById("resetDataBtn").addEventListener("click", () => {
+      exitHistoryMode(false);
       disableLiveMode();
       for (const d of DONGS) { d.wd.set(d.origWd); d.we.set(d.origWe); }
       recomputeAggregates(); refreshAllCellScales();
       state.customDataName = null; updateLiveButtonUI();
       uploadStatus.classList.remove("hidden"); uploadStatus.innerHTML = `<span class="font-semibold">내장 대한민국 전국 초정밀 모델 데이터로 복원되었습니다.</span>`;
       apiStatusBox.classList.add("hidden");
+      historyStatusBox.classList.add("hidden");
       updateLegend(); markTimeDirty(); updateSidebar(); drawTimelineWave();
     });
 
