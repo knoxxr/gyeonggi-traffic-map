@@ -119,7 +119,7 @@
           </div>
         </div>
         <div class="flex lg:hidden items-center gap-1.5 shrink-0">
-          <button id="openUploadBtnMobile" class="px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs font-medium cursor-pointer" title="CSV/JSON 업로드">CSV</button>
+          <button id="openUploadBtnMobile" class="px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs font-medium cursor-pointer" title="실시간 API 연결 및 CSV/JSON 업로드">API·CSV</button>
           <button id="toggleSidebarBtn" class="px-2.5 py-1 rounded-md bg-[var(--secondary)] border border-[var(--border)] text-xs font-semibold cursor-pointer">요약·순위</button>
         </div>
       </div>
@@ -143,9 +143,9 @@
           <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="sgg" title="경기도 47개 시·군·구">시·군·구</button>
         </div>
 
-        <button id="openUploadBtn" class="hidden lg:flex px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-medium items-center gap-1.5 cursor-pointer shrink-0" title="실제 행정동별 시간대 트래픽 CSV 또는 JSON 파일 불러오기">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <span>실데이터</span>
+        <button id="openUploadBtn" class="hidden lg:flex px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-medium items-center gap-1.5 cursor-pointer shrink-0" title="실시간 REST API 자동 폴링 연결 또는 CSV/JSON 파일 업로드">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+          <span>실시간 API · 데이터</span>
         </button>
       </div>
     </header>
@@ -383,17 +383,21 @@
               <svg id="playIcon" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
               <svg id="pauseIcon" class="hidden" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
             </button>
+            <button id="liveBtn" class="h-9 px-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors" title="현재 한국 시각(KST) 실시간 동기화 및 자동 갱신 (L)">
+              <span id="liveDot" class="w-2 h-2 rounded-full bg-[var(--muted-foreground)]"></span>
+              <span>LIVE</span>
+            </button>
             <div class="flex items-center rounded-lg border border-[var(--border)] bg-[var(--background)] overflow-hidden text-xs">
               <button id="prevStepBtn" class="px-2 py-1.5 hover:bg-[var(--secondary)] cursor-pointer" title="이전 구간 (←)">◀</button>
               <button id="nextStepBtn" class="px-2 py-1.5 hover:bg-[var(--secondary)] border-l border-[var(--border)] cursor-pointer" title="다음 구간 (→)">▶</button>
             </div>
-            <button id="speedBtn" class="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-mono tabular-nums cursor-pointer" title="재생 속도">1.0×</button>
+            <button id="speedBtn" class="hidden sm:inline-block px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-mono tabular-nums cursor-pointer" title="재생 속도">1.0×</button>
             <div class="flex items-center p-0.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs" role="group" aria-label="시간 해상도">
               <button class="seg-btn active px-2 py-1 rounded cursor-pointer" data-tstep="15" title="15분 단위 96구간 초정밀 시간 탐색">15분</button>
               <button class="seg-btn px-2 py-1 rounded cursor-pointer" data-tstep="60" title="1시간 단위 24구간">1시간</button>
             </div>
           </div>
-          <div class="pl-1 min-w-[104px] text-right md:text-left">
+          <div class="pl-1 min-w-[108px] text-right md:text-left">
             <div id="clockTime" class="text-base font-bold font-mono tabular-nums leading-tight">08:15</div>
             <div id="clockPhase" class="text-[12px] text-[var(--muted-foreground)] leading-tight truncate">오전 출근 피크</div>
           </div>
@@ -421,14 +425,71 @@
     </footer>
   </div>
 
-  <!-- CSV / JSON Real Data Upload Modal -->
+  <!-- Real-Time API Connector & CSV/JSON Data Modal -->
   <div id="uploadModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-4">
-    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl max-w-lg w-full p-5 text-xs">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl max-w-xl w-full p-5 text-xs max-h-[90dvh] overflow-y-auto thin-scroll">
       <div class="flex items-center justify-between pb-3 border-b border-[var(--card-border)]">
-        <h2 class="text-sm font-bold">실제 통신 트래픽 데이터 업로드 (CSV / JSON)</h2>
+        <h2 class="text-sm font-bold">실시간 API 연동 및 데이터 관리</h2>
         <button id="closeUploadModal" class="text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-base cursor-pointer">✕</button>
       </div>
-      <div class="py-3 space-y-3">
+
+      <!-- Modal Tabs -->
+      <div class="flex items-center gap-1 p-1 mt-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+        <button id="tabApiBtn" class="seg-btn active flex-1 py-1.5 rounded-md cursor-pointer font-medium">실시간 API 자동 폴링</button>
+        <button id="tabFileBtn" class="seg-btn flex-1 py-1.5 rounded-md cursor-pointer font-medium">CSV / JSON 파일 업로드</button>
+      </div>
+
+      <!-- Tab 1: Real-Time REST JSON API Poller -->
+      <div id="tabApiPanel" class="py-3 space-y-3">
+        <p class="text-[var(--muted-foreground)] leading-relaxed">
+          통신사 B2B 프록시, 사내 서버, 또는 공공 교통 API의 <strong>JSON 엔드포인트</strong>를 연결하면 지정한 주기마다 자동으로 트래픽 데이터를 불러와 602개 행정동 및 11,286개 셀 지도를 실시간 갱신합니다.
+        </p>
+
+        <div class="space-y-2">
+          <div>
+            <label for="apiUrlInput" class="block font-medium mb-1">실시간 JSON API URL</label>
+            <input id="apiUrlInput" type="url" placeholder="https://example.com/api/gyeonggi-traffic.json" class="w-full px-2.5 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label for="apiAuthInput" class="block font-medium mb-1">인증 헤더 (선택: Bearer 토큰 등)</label>
+              <input id="apiAuthInput" type="text" placeholder="Authorization: Bearer ..." class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
+            </div>
+            <div>
+              <label for="apiIntervalSelect" class="block font-medium mb-1">자동 갱신 주기</label>
+              <select id="apiIntervalSelect" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none cursor-pointer">
+                <option value="10">10초마다 갱신</option>
+                <option value="30" selected>30초마다 갱신</option>
+                <option value="60">1분마다 갱신</option>
+                <option value="300">5분마다 갱신</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="apiStartBtn" class="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold cursor-pointer">실시간 API 폴링 시작</button>
+          <button id="apiStopBtn" class="hidden px-3 py-1.5 rounded-lg bg-[#dc2626] text-white font-semibold cursor-pointer">폴링 중지</button>
+          <button id="apiTestBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">1회 테스트</button>
+          <button id="apiDemoKstBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">KST 실시간 모드 켜기</button>
+        </div>
+
+        <div id="apiStatusBox" class="hidden p-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] leading-relaxed"></div>
+
+        <details class="rounded-lg border border-[var(--card-border)] bg-[var(--background)] p-2.5">
+          <summary class="cursor-pointer font-medium text-[var(--foreground)]">지원 JSON 응답 스키마 보기 (행정동 코드 · 이름 · 경위도 좌표 모두 지원)</summary>
+          <pre class="mt-2 p-2 rounded bg-[var(--card)] border border-[var(--card-border)] overflow-x-auto font-mono text-[11px] leading-relaxed text-[var(--muted-foreground)]">// 1) 행정동별 실시간 스냅샷 (직전 폴링과 자동 Δ 비교)
+{ "data": [
+  { "adm_cd": "4113565500", "traffic_gbps": 38.4 },
+  { "sggnm": "성남시분당구", "dongnm": "백현동", "traffic_gbps": 29.1 }
+]}
+// 2) 기지국·셀 경위도 좌표 스냅샷 (가장 가까운 1km 셀에 직접 반영)
+[ { "lon": 127.1086, "lat": 37.4018, "traffic_gbps": 9.8 } ]</pre>
+        </details>
+      </div>
+
+      <!-- Tab 2: File Upload -->
+      <div id="tabFilePanel" class="hidden py-3 space-y-3">
         <p class="text-[var(--muted-foreground)] leading-relaxed">
           통신사(SKT·KT·LGU+) 또는 경기데이터드림 등의 <strong>행정동별 시간대 트래픽 CSV/JSON</strong> 파일을 업로드하면 602개 행정동과 하위 <strong>11,286개 1km 셀·385m 초미세 셀</strong>에 즉시 비례 반영됩니다.
         </p>
@@ -440,14 +501,14 @@
         </div>
 
         <div id="uploadStatus" class="hidden p-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)]"></div>
+      </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--card-border)]">
-          <div class="flex items-center gap-2">
-            <button id="downloadCsvBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">현재 데이터 CSV 내보내기</button>
-            <button id="resetDataBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">내장 모델 복원</button>
-          </div>
-          <button id="closeUploadBtn2" class="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer">닫기</button>
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[var(--card-border)]">
+        <div class="flex items-center gap-2">
+          <button id="downloadCsvBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">현재 데이터 CSV 내보내기</button>
+          <button id="resetDataBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">내장 모델 복원</button>
         </div>
+        <button id="closeUploadBtn2" class="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer">닫기</button>
       </div>
     </div>
   </div>
@@ -1362,6 +1423,29 @@
 
     // Cached pulse hotspots (world coords) — recomputed ONLY on time/level/filter change!
     let pulseHotspots = [];
+    const liveBurstMul = new Float32Array(HEX_COUNT).fill(1.0);
+    const liveBurstPrev = new Float32Array(HEX_COUNT).fill(1.0);
+    const liveState = {
+      enabled: false,
+      source: "kst", // 'kst' | 'api'
+      lastSyncStr: "",
+      kstClockStr: "",
+      apiUrl: "",
+      apiAuth: "",
+      intervalSec: 30,
+      pollTimer: null,
+      pollCount: 0,
+      prevSnapByDong: null,
+      prevSnapByCell: null,
+      tickAcc: 0,
+      burstAcc: 0,
+    };
+
+    function lonLatToWorld(lon, lat) {
+      const wx = (lon * BUNDLE.meta.cosLat - BUNDLE.meta.minX) * BUNDLE.meta.scale;
+      const wy = (BUNDLE.meta.maxY - lat) * BUNDLE.meta.scale;
+      return [wx, wy];
+    }
 
     function recomputeFrameMetrics() {
       const domain = getMetricDomain(false);
@@ -1369,6 +1453,7 @@
       const arr = state.day === "wd" ? cellWd : cellWe;
       const avgArr = state.day === "wd" ? cellAvgWd : cellAvgWe;
       const metricMode = state.metric;
+      const useLiveMul = liveState.enabled;
 
       // Compute all 11,286 1km cell values + track top pulse movers in O(N)
       const pulseCut = state.timeStepMin === 15 ? 3.5 : 14.0;
@@ -1376,8 +1461,12 @@
 
       for (let i = 0; i < HEX_COUNT; i++) {
         const off = i * 24;
-        const cur = evalCurve24(arr, off, state.hour);
-        const prev = evalCurve24(arr, off, state.hour - dtH);
+        let cur = evalCurve24(arr, off, state.hour);
+        let prev = evalCurve24(arr, off, state.hour - dtH);
+        if (useLiveMul) {
+          cur *= liveBurstMul[i];
+          prev *= liveBurstPrev[i];
+        }
         const dAbs = cur - prev;
         const dPct = prev > 0.0005 ? (dAbs / prev) * 100 : 0;
         const val = metricMode === "deltaPct" ? dPct
@@ -2059,13 +2148,19 @@
       if (state.dirtyMetrics) recomputeFrameMetrics();
 
       const hrInt = Math.floor(state.hour) % 24;
-      const clockStr = formatClock(state.hour);
+      const clockStr = liveState.enabled && liveState.kstClockStr ? liveState.kstClockStr : formatClock(state.hour);
       const dayLabel = state.day === "wd" ? "평일" : "주말";
       const stepLabel = state.timeStepMin === 15 ? "15분" : "1시간";
 
       document.getElementById("clockTime").textContent = clockStr;
-      document.getElementById("clockPhase").textContent = `${dayLabel} · ${(state.day === "wd" ? HOUR_PHASES_WD : HOUR_PHASES_WE)[hrInt]}`;
-      document.getElementById("kpiTimeBadge").textContent = `${dayLabel} ${clockStr}`;
+      if (liveState.enabled) {
+        const srcLbl = liveState.source === "api" ? `LIVE API (${liveState.lastSyncStr || "동기화"})` : "LIVE KST · 실시간 추정";
+        document.getElementById("clockPhase").textContent = srcLbl;
+        document.getElementById("kpiTimeBadge").textContent = `● LIVE ${dayLabel} ${clockStr}`;
+      } else {
+        document.getElementById("clockPhase").textContent = `${dayLabel} · ${(state.day === "wd" ? HOUR_PHASES_WD : HOUR_PHASES_WE)[hrInt]}`;
+        document.getElementById("kpiTimeBadge").textContent = `${dayLabel} ${clockStr}`;
+      }
       document.getElementById("kpiDeltaTitle").textContent = `${stepLabel} 변화`;
       document.getElementById("archSubLabel").textContent = `${stepLabel} 전 대비`;
       document.getElementById("rankHeading").textContent =
@@ -2485,6 +2580,19 @@
             updateSidebar();
             drawTimelineWave();
           }
+        } else if (liveState.enabled) {
+          liveState.tickAcc += dt;
+          if (liveState.tickAcc >= 1.0) {
+            liveState.tickAcc = 0;
+            syncKstClock(false);
+          }
+          if (liveState.source === "kst") {
+            liveState.burstAcc += dt;
+            if (liveState.burstAcc >= 3.0) {
+              liveState.burstAcc = 0;
+              stepLiveKstBursts();
+            }
+          }
         }
 
         if (state.camTarget) {
@@ -2848,6 +2956,7 @@
       syncPresetChips(state.hour);
     }
     function setHour(h) {
+      if (liveState.enabled) disableLiveMode();
       state.hour = ((h % 24) + 24) % 24;
       syncSliderFromHour();
       markTimeDirty();
@@ -2863,7 +2972,9 @@
         state.timeStepMin = Number(btn.dataset.tstep);
         document.querySelectorAll("[data-tstep]").forEach((b) => b.classList.toggle("active", b === btn));
         timeSlider.max = state.timeStepMin === 15 ? "95" : "23";
-        state.hour = state.timeStepMin === 60 ? Math.round(state.hour) % 24 : Math.round(state.hour * 4) / 4;
+        if (!liveState.enabled) {
+          state.hour = state.timeStepMin === 60 ? Math.round(state.hour) % 24 : Math.round(state.hour * 4) / 4;
+        }
         syncSliderFromHour();
         updateLegend();
         markTimeDirty();
@@ -2873,6 +2984,7 @@
     });
 
     function togglePlay() {
+      if (!state.playing && liveState.enabled) disableLiveMode();
       state.playing = !state.playing;
       document.getElementById("playIcon").classList.toggle("hidden", state.playing);
       document.getElementById("pauseIcon").classList.toggle("hidden", !state.playing);
@@ -2924,6 +3036,7 @@
       if (document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
       const s = state.timeStepMin === 15 ? 0.25 : 1.0;
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+      else if (e.key.toLowerCase() === "l") { e.preventDefault(); if (liveState.enabled) disableLiveMode(); else enableLiveKstMode(); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.round((state.hour - s) / s) * s); }
       else if (e.key === "ArrowRight") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.round((state.hour + s) / s) * s); }
       else if (e.key === "Escape") { selectTarget(null); document.getElementById("uploadModal").classList.add("hidden"); }
@@ -2933,12 +3046,163 @@
     });
 
     // -----------------------------------------------------------------------
-    // 11. Real Data CSV / JSON Upload & Export
+    // 11. LIVE KST Real-Time Sync + External REST JSON API Auto-Poller + CSV
     // -----------------------------------------------------------------------
+    const kstFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Seoul",
+      weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    });
+
+    function getKstNow() {
+      const parts = kstFmt.formatToParts(new Date());
+      let wd = "Mon", hh = 0, mm = 0, ss = 0;
+      for (const p of parts) {
+        if (p.type === "weekday") wd = p.value;
+        else if (p.type === "hour") hh = parseInt(p.value, 10) % 24;
+        else if (p.type === "minute") mm = parseInt(p.value, 10);
+        else if (p.type === "second") ss = parseInt(p.value, 10);
+      }
+      return {
+        hourFloat: hh + mm / 60 + ss / 3600,
+        hh, mm, ss,
+        hhmmss: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`,
+        isWeekend: wd === "Sat" || wd === "Sun",
+      };
+    }
+
+    function updateLiveButtonUI() {
+      const btn = document.getElementById("liveBtn");
+      const dot = document.getElementById("liveDot");
+      const tag = document.getElementById("dataSourceTag");
+      if (liveState.enabled) {
+        btn.style.background = "#dc2626";
+        btn.style.borderColor = "#dc2626";
+        btn.style.color = "#ffffff";
+        dot.style.background = "#ffffff";
+        tag.textContent = liveState.source === "api"
+          ? `LIVE API · ${liveState.intervalSec}초 폴링`
+          : `LIVE KST · 실시간 추정`;
+      } else {
+        btn.style.background = "";
+        btn.style.borderColor = "";
+        btn.style.color = "";
+        dot.style.background = "";
+        tag.textContent = state.customDataName
+          ? `사용자 데이터 · ${state.customDataName}`
+          : `${HEX_COUNT.toLocaleString()} 셀 · 602 동`;
+      }
+    }
+
+    function syncKstClock(forceMetricRedraw = false) {
+      const kst = getKstNow();
+      liveState.kstClockStr = kst.hhmmss;
+      const targetDay = kst.isWeekend ? "we" : "wd";
+      const dayChanged = state.day !== targetDay;
+      if (dayChanged) {
+        state.day = targetDay;
+        document.querySelectorAll("[data-day]").forEach((b) => b.classList.toggle("active", b.dataset.day === targetDay));
+      }
+      const prevH = state.hour;
+      state.hour = kst.hourFloat;
+      syncSliderFromHour();
+      document.getElementById("clockTime").textContent = kst.hhmmss;
+      document.getElementById("kpiTimeBadge").textContent = `● LIVE ${kst.isWeekend ? "주말" : "평일"} ${kst.hhmmss}`;
+      if (forceMetricRedraw || dayChanged || Math.abs(state.hour - prevH) >= 0.015) {
+        markTimeDirty();
+        updateSidebar();
+        drawTimelineWave();
+      }
+    }
+
+    function stepLiveKstBursts() {
+      // Shift current multipliers into prev for realistic live differential ripples
+      liveBurstPrev.set(liveBurstMul);
+      const t = Date.now() * 0.00045;
+      // Pick 6 shifting localized hotspot waves around active Gyeonggi-do anchors
+      const waves = [];
+      for (let w = 0; w < 6; w++) {
+        const ai = Math.floor((Math.sin(t * 0.37 + w * 2.1) * 0.5 + 0.5) * ANCHORS.length) % ANCHORS.length;
+        const a = ANCHORS[ai];
+        const sign = Math.sin(t * 1.15 + w * 1.7) >= 0 ? 1 : -1;
+        waves.push([a[0], a[1], a[3] * 1.35, sign * (0.045 + 0.03 * Math.abs(Math.cos(t + w)))]);
+      }
+      for (let i = 0; i < HEX_COUNT; i++) {
+        // Gentle mean-reversion toward 1.0 + tiny background cellular jitter
+        let m = 1.0 + (liveBurstMul[i] - 1.0) * 0.55 + (Math.sin(t * 2.7 + i * 0.618) * 0.016);
+        const cx = cellXY[i * 2], cy = cellXY[i * 2 + 1];
+        for (let w = 0; w < waves.length; w++) {
+          const dx = cx - waves[w][0], dy = cy - waves[w][1], r = waves[w][2];
+          const d2 = dx * dx + dy * dy;
+          if (d2 < r * r * 4.0) {
+            m += waves[w][3] * Math.exp(-0.5 * d2 / (r * r));
+          }
+        }
+        liveBurstMul[i] = Math.max(0.86, Math.min(1.16, m));
+      }
+      markTimeDirty();
+      updateSidebar();
+    }
+
+    function enableLiveKstMode() {
+      if (state.playing) togglePlay();
+      stopApiPolling(false);
+      liveState.enabled = true;
+      liveState.source = "kst";
+      liveState.tickAcc = 0;
+      liveState.burstAcc = 0;
+      liveBurstMul.fill(1.0);
+      liveBurstPrev.fill(1.0);
+      updateLiveButtonUI();
+      syncKstClock(true);
+      stepLiveKstBursts();
+    }
+
+    function disableLiveMode() {
+      stopApiPolling(false);
+      liveState.enabled = false;
+      liveState.source = "kst";
+      liveBurstMul.fill(1.0);
+      liveBurstPrev.fill(1.0);
+      updateLiveButtonUI();
+      markTimeDirty();
+      updateSidebar();
+      drawTimelineWave();
+    }
+
+    document.getElementById("liveBtn").addEventListener("click", () => {
+      if (liveState.enabled) disableLiveMode();
+      else enableLiveKstMode();
+    });
+
+    // Modal Tabs & Elements
     const uploadModal = document.getElementById("uploadModal");
     const uploadStatus = document.getElementById("uploadStatus");
+    const apiStatusBox = document.getElementById("apiStatusBox");
+    const apiUrlInput = document.getElementById("apiUrlInput");
+    const apiAuthInput = document.getElementById("apiAuthInput");
+    const apiIntervalSelect = document.getElementById("apiIntervalSelect");
+    const apiStartBtn = document.getElementById("apiStartBtn");
+    const apiStopBtn = document.getElementById("apiStopBtn");
     const dropZone = document.getElementById("dropZone");
     const fileInput = document.getElementById("fileInput");
+
+    function setModalTab(tab) {
+      const isApi = tab === "api";
+      document.getElementById("tabApiBtn").classList.toggle("active", isApi);
+      document.getElementById("tabFileBtn").classList.toggle("active", !isApi);
+      document.getElementById("tabApiPanel").classList.toggle("hidden", !isApi);
+      document.getElementById("tabFilePanel").classList.toggle("hidden", isApi);
+    }
+    document.getElementById("tabApiBtn").addEventListener("click", () => setModalTab("api"));
+    document.getElementById("tabFileBtn").addEventListener("click", () => setModalTab("file"));
+
+    // Restore saved API URL & interval from localStorage
+    try {
+      const savedUrl = localStorage.getItem("gg_live_api_url");
+      const savedInt = localStorage.getItem("gg_live_api_interval");
+      if (savedUrl) apiUrlInput.value = savedUrl;
+      if (savedInt) apiIntervalSelect.value = savedInt;
+    } catch (_) {}
 
     document.getElementById("openUploadBtn").addEventListener("click", () => uploadModal.classList.remove("hidden"));
     document.getElementById("closeUploadModal").addEventListener("click", () => uploadModal.classList.add("hidden"));
@@ -2969,6 +3233,158 @@
       buildHexCells();
     }
 
+    // Apply live REST JSON API payload (supports adm_cd, sggnm+dongnm, lon/lat cell coordinates, or 24h records)
+    function applyLiveApiPayload(parsed) {
+      const arr = Array.isArray(parsed) ? parsed : (parsed.data || parsed.rows || parsed.items || parsed.cells || []);
+      if (!Array.isArray(arr) || arr.length === 0) throw new Error("JSON 배열 데이터가 비어 있습니다.");
+
+      // If payload contains 24h `hour` column across multiple hours, route to full table updater
+      const hasHourCol = arr.some((r) => r.hour !== undefined && r.hour !== null && r.hour !== "");
+      const kst = getKstNow();
+      const dayKey = kst.isWeekend ? "we" : "wd";
+      const curHr = kst.hh;
+
+      if (hasHourCol) {
+        applyUploadedRecords(arr, "실시간 API");
+        return { matched: arr.length, mode: "24h" };
+      }
+
+      // Live Snapshot mode: preserve previous multipliers for authentic live Δ comparison
+      liveBurstPrev.set(liveBurstMul);
+      let matchedDongs = 0, matchedCoords = 0;
+      const dongScaleUpdate = new Map();
+
+      for (const r of arr) {
+        const v = parseFloat(r.traffic_gbps ?? r.traffic ?? r.value ?? r.gbps);
+        if (isNaN(v) || v < 0) continue;
+
+        if (r.lon !== undefined && r.lat !== undefined) {
+          const [wx, wy] = lonLatToWorld(parseFloat(r.lon), parseFloat(r.lat));
+          const cid = hitTestHex1km(wx, wy);
+          if (cid !== -1) {
+            const baseV = evalCurve24(dayKey === "wd" ? cellWd : cellWe, cid * 24, kst.hourFloat);
+            liveBurstMul[cid] = Math.max(0.1, Math.min(8.0, v / Math.max(0.05, baseV)));
+            matchedCoords++;
+          }
+          continue;
+        }
+
+        let d = null;
+        if (r.adm_cd) d = dongByCd.get(String(r.adm_cd).trim()) || dongByCd.get(String(r.adm_cd).trim().slice(0, 8));
+        if (!d && r.sggnm && r.dongnm) d = dongByFull.get((String(r.sggnm) + "|" + String(r.dongnm)).replace(/\s+/g, ""));
+        if (d) {
+          const baseV = Math.max(0.05, evalCurve24(d[dayKey], 0, kst.hourFloat));
+          d[dayKey][curHr] = v;
+          dongScaleUpdate.set(d.id, Math.max(0.1, Math.min(8.0, v / baseV)));
+          matchedDongs++;
+        }
+      }
+
+      if (matchedDongs === 0 && matchedCoords === 0) {
+        throw new Error("매칭된 행정동 또는 경위도 좌표가 없습니다. (adm_cd / sggnm+dongnm / lon+lat 확인)");
+      }
+
+      if (matchedDongs > 0) {
+        for (let i = 0; i < HEX_COUNT; i++) {
+          const ratio = dongScaleUpdate.get(cellDong[i]);
+          if (ratio !== undefined) liveBurstMul[i] = ratio;
+        }
+        recomputeAggregates();
+      }
+      return { matched: matchedDongs + matchedCoords, mode: matchedCoords > 0 ? "셀 좌표" : "행정동 스냅샷" };
+    }
+
+    async function fetchExternalApiOnce() {
+      const url = apiUrlInput.value.trim();
+      if (!url) {
+        apiStatusBox.classList.remove("hidden");
+        apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">API URL을 입력해 주세요.</span>`;
+        return false;
+      }
+      const headers = { Accept: "application/json" };
+      const authRaw = apiAuthInput.value.trim();
+      if (authRaw) {
+        const colon = authRaw.indexOf(":");
+        if (colon > 0) headers[authRaw.slice(0, colon).trim()] = authRaw.slice(colon + 1).trim();
+        else headers["Authorization"] = authRaw;
+      }
+
+      apiStatusBox.classList.remove("hidden");
+      apiStatusBox.innerHTML = `<span class="text-[var(--muted-foreground)]">데이터 수신 중...</span>`;
+      try {
+        const resp = await fetch(url, { headers, cache: "no-store" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+        const json = await resp.json();
+        const res = applyLiveApiPayload(json);
+        const kst = getKstNow();
+        liveState.pollCount++;
+        liveState.lastSyncStr = kst.hhmmss;
+        liveState.kstClockStr = kst.hhmmss;
+        apiStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">수신 성공 (${kst.hhmmss} KST · #${liveState.pollCount})</span><br/>${res.matched.toLocaleString()}개 항목(${res.mode})이 지도에 실시간 반영되었습니다.`;
+        syncKstClock(true);
+        return true;
+      } catch (err) {
+        apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">연결 실패:</span> ${err.message}<br/><span class="text-[var(--muted-foreground)]">외부 서버가 CORS(<code>Access-Control-Allow-Origin</code>)를 허용하는지 확인해 주세요.</span>`;
+        return false;
+      }
+    }
+
+    function stopApiPolling(updateUi = true) {
+      if (liveState.pollTimer) {
+        clearInterval(liveState.pollTimer);
+        liveState.pollTimer = null;
+      }
+      apiStartBtn.classList.remove("hidden");
+      apiStopBtn.classList.add("hidden");
+      if (updateUi) updateLiveButtonUI();
+    }
+
+    apiStartBtn.addEventListener("click", async () => {
+      const url = apiUrlInput.value.trim();
+      if (!url) {
+        apiStatusBox.classList.remove("hidden");
+        apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">연결할 JSON API URL을 입력해 주세요.</span>`;
+        return;
+      }
+      const sec = Math.max(5, parseInt(apiIntervalSelect.value, 10) || 30);
+      try {
+        localStorage.setItem("gg_live_api_url", url);
+        localStorage.setItem("gg_live_api_interval", String(sec));
+      } catch (_) {}
+
+      if (state.playing) togglePlay();
+      stopApiPolling(false);
+      liveState.enabled = true;
+      liveState.source = "api";
+      liveState.apiUrl = url;
+      liveState.intervalSec = sec;
+      liveState.pollCount = 0;
+      liveBurstMul.fill(1.0);
+      liveBurstPrev.fill(1.0);
+      apiStartBtn.classList.add("hidden");
+      apiStopBtn.classList.remove("hidden");
+      updateLiveButtonUI();
+
+      await fetchExternalApiOnce();
+      liveState.pollTimer = setInterval(() => {
+        if (!document.hidden && liveState.enabled && liveState.source === "api") {
+          fetchExternalApiOnce();
+        }
+      }, sec * 1000);
+    });
+
+    apiStopBtn.addEventListener("click", () => {
+      disableLiveMode();
+      apiStatusBox.classList.remove("hidden");
+      apiStatusBox.innerHTML = `<span class="font-semibold">실시간 API 폴링이 중지되었습니다.</span>`;
+    });
+
+    document.getElementById("apiTestBtn").addEventListener("click", () => fetchExternalApiOnce());
+    document.getElementById("apiDemoKstBtn").addEventListener("click", () => {
+      enableLiveKstMode();
+      uploadModal.classList.add("hidden");
+    });
+
     function applyUploadedRecords(records, filename) {
       const matchedDongs = new Set();
       let updatedCells = 0;
@@ -2993,7 +3409,7 @@
       recomputeAggregates();
       refreshAllCellScales();
       state.customDataName = filename;
-      document.getElementById("dataSourceTag").textContent = `사용자 데이터 · ${matchedDongs.size}/602 동`;
+      updateLiveButtonUI();
       uploadStatus.classList.remove("hidden");
       uploadStatus.innerHTML = `<span class="text-[#16a34a] font-semibold">적용 완료!</span> ${matchedDongs.size}개 행정동 (${updatedCells.toLocaleString()}개 셀) 및 하위 11,286개 1km 셀에 반영되었습니다.`;
       updateLegend(); markTimeDirty(); updateSidebar(); drawTimelineWave();
@@ -3038,12 +3454,14 @@
     });
 
     document.getElementById("resetDataBtn").addEventListener("click", () => {
+      disableLiveMode();
       for (const d of DONGS) { d.wd = d.origWd.slice(); d.we = d.origWe.slice(); }
       recomputeAggregates(); refreshAllCellScales();
       state.customDataName = null;
-      document.getElementById("dataSourceTag").textContent = `${HEX_COUNT.toLocaleString()} 셀 · 602 동`;
+      updateLiveButtonUI();
       uploadStatus.classList.remove("hidden");
       uploadStatus.innerHTML = `<span class="font-semibold">내장 경기도 초정밀 모델 데이터로 복원되었습니다.</span>`;
+      apiStatusBox.classList.add("hidden");
       updateLegend(); markTimeDirty(); updateSidebar(); drawTimelineWave();
     });
 
