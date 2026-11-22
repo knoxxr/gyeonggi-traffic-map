@@ -17,7 +17,14 @@
       overscroll-behavior: none;
       font-feature-settings: "tnum" 1;
     }
-    #mapCanvas { touch-action: none; }
+    #fxCanvas { touch-action: none; }
+    .map-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     .tabular-nums { font-variant-numeric: tabular-nums; }
@@ -96,7 +103,6 @@
 
     <!-- Top Header Bar -->
     <header class="shrink-0 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-1.5 lg:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-[var(--card)] border-b border-[var(--border)] z-20">
-      <!-- Brand / Title + Mobile Quick Actions -->
       <div class="flex items-center justify-between gap-2 min-w-0">
         <div class="flex items-center gap-2 min-w-0">
           <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center shrink-0">
@@ -118,9 +124,7 @@
         </div>
       </div>
 
-      <!-- Primary Controls: Metric + Day + Spatial Resolution -->
       <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-0.5 lg:pb-0">
-        <!-- Metric Mode -->
         <div class="flex items-center p-0.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs shrink-0" role="group" aria-label="지표 선택">
           <button class="seg-btn active px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="deltaPct" title="직전 구간 대비 트래픽 증감률(%)">변화율 Δ%</button>
           <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="deltaAbs" title="직전 구간 대비 트래픽 절대 증감량">Δ트래픽</button>
@@ -128,20 +132,17 @@
           <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="volume" title="현재 시각 총 모바일 트래픽">총 트래픽</button>
         </div>
 
-        <!-- Day Type -->
         <div class="flex items-center p-0.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs shrink-0" role="group" aria-label="요일 유형">
           <button class="seg-btn active px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-day="wd">평일</button>
           <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-day="we">주말</button>
         </div>
 
-        <!-- Spatial Level (3-Tier + Auto 385m Micro-Cell) -->
         <div class="flex items-center p-0.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs shrink-0" role="group" aria-label="공간 해상도">
           <button class="seg-btn active px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="cell" title="1km 육각 기지국 셀 11,286개 (확대 시 385m 79K 초미세 자동 분할)">초정밀 셀</button>
           <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="dong" title="경기도 602개 행정동(읍·면·동)">읍·면·동</button>
           <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="sgg" title="경기도 47개 시·군·구">시·군·구</button>
         </div>
 
-        <!-- Data Upload (Desktop) -->
         <button id="openUploadBtn" class="hidden lg:flex px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-medium items-center gap-1.5 cursor-pointer shrink-0" title="실제 행정동별 시간대 트래픽 CSV 또는 JSON 파일 불러오기">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <span>실데이터</span>
@@ -149,17 +150,20 @@
       </div>
     </header>
 
-    <!-- Main Body: Map Stage + Inspector Sidebar -->
+    <!-- Main Body: 3-Layer GPU Accelerated Map Stage + Inspector Sidebar -->
     <div class="flex-1 flex min-h-0 relative overflow-hidden">
 
-      <!-- Interactive Canvas Map Stage -->
       <main id="mapStage" class="flex-1 relative min-w-0 min-h-0 overflow-hidden bg-[var(--background)]">
-        <canvas id="mapCanvas" class="block w-full h-full cursor-grab active:cursor-grabbing"></canvas>
+        <!-- Layer 1: WebGL2 Hardware-Accelerated Instanced SDF Hex Layer (or Canvas2D fallback) -->
+        <canvas id="glCanvas" class="map-layer pointer-events-none"></canvas>
+        <!-- Layer 2: Crisp 2D Vector Boundaries, Highways, Selection & Labels (dirty-redraw only) -->
+        <canvas id="vectorCanvas" class="map-layer pointer-events-none"></canvas>
+        <!-- Layer 3: Lightweight 30fps Pulse FX Overlay + Touch/Pointer Surface -->
+        <canvas id="fxCanvas" class="map-layer cursor-grab active:cursor-grabbing"></canvas>
 
         <!-- Top-Left Floating Search & Layer Bar -->
         <div class="absolute top-2.5 left-2.5 right-2.5 sm:right-auto flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-start gap-1.5 sm:gap-2 pointer-events-none z-10">
           <div class="flex items-center gap-1.5 pointer-events-auto">
-            <!-- Search Input (Searches SGGs, 602 Dongs, AND 129 Sub-Anchors!) -->
             <div class="relative flex-1 sm:flex-none sm:w-64">
               <div class="glass-panel flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border)] shadow-sm">
                 <svg class="shrink-0 text-[var(--muted-foreground)]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -169,13 +173,11 @@
               <div id="searchResults" class="hidden absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto thin-scroll rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg text-xs z-30"></div>
             </div>
 
-            <!-- SGG Quick Filter -->
             <select id="sggFilter" class="glass-panel px-2 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--foreground)] shadow-sm outline-none cursor-pointer max-w-[130px] sm:max-w-none">
               <option value="">전체 경기도</option>
             </select>
           </div>
 
-          <!-- Overlay Toggles -->
           <div class="pointer-events-auto flex items-center gap-1 overflow-x-auto no-scrollbar">
             <button id="layerMicro" class="chip-btn active glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="확대 시 1km 셀을 385m 7-분할(H3) 초미세 셀로 자동 세분화">400m 자동분할</button>
             <button id="layerPulse" class="chip-btn active glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="급증/급감 상위 셀·행정동 펄스 마커 표시">급변 펄스</button>
@@ -196,10 +198,10 @@
           <div id="legendTicks" class="flex items-center justify-between text-[12px] text-[var(--muted-foreground)] tabular-nums mt-1"></div>
         </div>
 
-        <!-- Bottom-Right Resolution Indicator + Zoom & Scale Controls -->
+        <!-- Bottom-Right Resolution/Engine Indicator + Zoom & Scale Controls -->
         <div class="absolute bottom-2.5 right-2.5 flex flex-col items-end gap-1.5 pointer-events-none z-10">
           <div id="resBadge" class="glass-panel px-2 py-1 rounded-md border border-[var(--border)] text-[12px] font-mono tabular-nums text-[var(--foreground)] shadow-sm">
-            1.0 km 셀 · 11,286개
+            GPU · 1.0 km 셀 · 11,286개
           </div>
           <div class="pointer-events-auto flex flex-col rounded-lg border border-[var(--border)] glass-panel shadow-sm overflow-hidden">
             <button id="zoomInBtn" class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center text-sm font-semibold hover:bg-[var(--secondary)] border-b border-[var(--border)] cursor-pointer" title="확대 (+)">+</button>
@@ -246,16 +248,13 @@
 
       <!-- Right Inspector Sidebar (Desktop) / Bottom Sheet Drawer (Mobile) -->
       <aside id="sidebar" class="hidden lg:flex fixed lg:static inset-x-0 bottom-0 lg:inset-auto max-h-[62dvh] lg:max-h-none w-full lg:w-80 xl:w-96 shrink-0 bg-[var(--card)] border-t lg:border-t-0 lg:border-l border-[var(--border)] rounded-t-2xl lg:rounded-none shadow-2xl lg:shadow-none flex-col min-h-0 z-30">
-        <!-- Mobile Sheet Grabber & Close Bar -->
         <div class="lg:hidden shrink-0 flex items-center justify-between px-3.5 py-2 border-b border-[var(--card-border)]">
           <div class="w-9 h-1 rounded-full bg-[var(--border)]"></div>
           <span class="text-xs font-semibold text-[var(--muted-foreground)]">지역·셀 분석 패널</span>
           <button id="closeMobileSidebarBtn" class="px-2 py-0.5 rounded text-xs font-semibold text-[var(--foreground)] bg-[var(--secondary)] cursor-pointer">닫기 ✕</button>
         </div>
 
-        <!-- Overview Panel -->
         <div id="overviewPanel" class="flex-1 flex flex-col min-h-0 overflow-y-auto thin-scroll">
-          <!-- KPI Header -->
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold text-[var(--muted-foreground)]">경기도 전체 실시간 요약</span>
@@ -277,7 +276,6 @@
             </div>
           </div>
 
-          <!-- Top Movers Ranking -->
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between gap-2 mb-2.5">
               <h2 id="rankHeading" class="text-xs font-semibold text-[var(--foreground)]">시간대별 변화 TOP 셀</h2>
@@ -290,7 +288,6 @@
             <div id="rankList" class="space-y-1"></div>
           </div>
 
-          <!-- Urban Archetype Breakdown -->
           <div class="p-3.5">
             <div class="flex items-center justify-between mb-2">
               <h2 class="text-xs font-semibold text-[var(--foreground)]">도시 기능 유형별 평균 변화율</h2>
@@ -298,12 +295,11 @@
             </div>
             <div id="archetypeBars" class="space-y-2"></div>
             <p class="mt-3 text-[12px] leading-relaxed text-[var(--muted-foreground)]">
-              지도를 확대하면 1km 기지국 셀이 자동으로 <strong>385m(7-분할 H3) 초미세 셀</strong>로 세분화됩니다. 임의의 셀이나 행정동을 클릭해 15분 단위 24시간 변화 곡선을 확인하세요.
+              WebGL2 GPU 인스턴싱과 3레이어 분리 렌더링으로 11,286개 1km 셀 및 확대 시 <strong>385m(7-분할 H3) 초미세 셀</strong>을 부드럽게 탐색할 수 있습니다.
             </p>
           </div>
         </div>
 
-        <!-- Detail Inspector Panel -->
         <div id="detailPanel" class="hidden flex-1 flex flex-col min-h-0 overflow-y-auto thin-scroll">
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between gap-2 mb-2">
@@ -325,7 +321,6 @@
               <button id="jumpParentDongBtn" class="px-2.5 py-1 rounded-md bg-[var(--secondary)] hover:opacity-90 border border-[var(--border)] text-xs font-medium cursor-pointer"></button>
             </div>
 
-            <!-- 4 KPI Readouts -->
             <div class="grid grid-cols-2 gap-2 mt-3">
               <div class="p-2 rounded-lg bg-[var(--background)] border border-[var(--card-border)]">
                 <div class="text-[12px] text-[var(--muted-foreground)]">현재 트래픽</div>
@@ -346,7 +341,6 @@
             </div>
           </div>
 
-          <!-- 24h Interactive Chart -->
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between mb-1.5">
               <h3 class="text-xs font-semibold">24시간 트래픽 추이 &amp; 구간 변화량</h3>
@@ -360,7 +354,6 @@
             </div>
           </div>
 
-          <!-- 5G & Service Mix -->
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between mb-2">
               <h3 class="text-xs font-semibold">통신망 &amp; 서비스 구성</h3>
@@ -373,7 +366,6 @@
             <div id="detServiceMix" class="space-y-1.5 text-xs"></div>
           </div>
 
-          <!-- Sibling / Nearby Comparison -->
           <div class="p-3.5">
             <h3 id="detSiblingTitle" class="text-xs font-semibold mb-2">인근 변화량 상위 지역</h3>
             <div id="detSiblingList" class="space-y-1"></div>
@@ -385,7 +377,6 @@
     <!-- Bottom Timeline Controller -->
     <footer class="shrink-0 bg-[var(--card)] border-t border-[var(--border)] px-3 py-2 z-20">
       <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2.5 md:gap-3">
-        <!-- Playback Controls + Time Granularity + Clock -->
         <div class="flex items-center justify-between md:justify-start gap-2 shrink-0">
           <div class="flex items-center gap-1.5">
             <button id="playBtn" class="w-9 h-9 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center hover:opacity-90 cursor-pointer shrink-0" title="재생 / 일시정지 (Space)">
@@ -397,7 +388,6 @@
               <button id="nextStepBtn" class="px-2 py-1.5 hover:bg-[var(--secondary)] border-l border-[var(--border)] cursor-pointer" title="다음 구간 (→)">▶</button>
             </div>
             <button id="speedBtn" class="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-mono tabular-nums cursor-pointer" title="재생 속도">1.0×</button>
-            <!-- Time Step Granularity Toggle (15분 vs 1시간) -->
             <div class="flex items-center p-0.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs" role="group" aria-label="시간 해상도">
               <button class="seg-btn active px-2 py-1 rounded cursor-pointer" data-tstep="15" title="15분 단위 96구간 초정밀 시간 탐색">15분</button>
               <button class="seg-btn px-2 py-1 rounded cursor-pointer" data-tstep="60" title="1시간 단위 24구간">1시간</button>
@@ -409,7 +399,6 @@
           </div>
         </div>
 
-        <!-- Integrated 24h Province Waveform + Scrubber -->
         <div class="flex-1 min-w-0 flex flex-col gap-1">
           <canvas id="timelineWave" height="28" class="w-full h-[28px] block cursor-pointer"></canvas>
           <div class="relative flex items-center">
@@ -420,7 +409,6 @@
           </div>
         </div>
 
-        <!-- Quick Time Presets -->
         <div class="hidden xl:flex items-center gap-1 shrink-0">
           <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="3">03시</button>
           <button class="chip-btn active px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="8.25">08:15</button>
@@ -471,7 +459,7 @@
   (function () {
     "use strict";
 
-    // Standalone fallback ONLY when opened outside Antigravity host
+    // Standalone theme fallback ONLY when opened outside Antigravity host
     (function ensureStandaloneTheme() {
       const rootStyle = getComputedStyle(document.documentElement);
       if (!rootStyle.getPropertyValue("--background").trim()) {
@@ -490,14 +478,12 @@
           "--secondary": "#edf1f6", "--secondary-foreground": "#111827"
         };
         if (!dark) document.documentElement.classList.add("light");
-        for (const [k, v] of Object.entries(vars)) {
-          document.documentElement.style.setProperty(k, v);
-        }
+        for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
       }
     })();
 
     // -----------------------------------------------------------------------
-    // 1. Parse Embedded Topology, 602 Dongs, 47 SGGs, and 11,286 1km Hex Grid
+    // 1. Parse Embedded Topology & Build Pre-Merged Static Path2Ds (1 draw call!)
     // -----------------------------------------------------------------------
     const BUNDLE = JSON.parse(document.getElementById("gyeonggi-data").textContent);
     const MAP_W = BUNDLE.meta.w;
@@ -514,25 +500,18 @@
       return [lon, lat];
     }
 
-    // Decode shared arcs once
     const DECODED_ARCS = BUNDLE.arcs.map((raw) => {
       const pts = new Int16Array(raw.length);
       let x = raw[0], y = raw[1];
       pts[0] = x; pts[1] = y;
-      for (let i = 2; i < raw.length; i += 2) {
-        x += raw[i]; y += raw[i + 1];
-        pts[i] = x; pts[i + 1] = y;
-      }
+      for (let i = 2; i < raw.length; i += 2) { x += raw[i]; y += raw[i + 1]; pts[i] = x; pts[i + 1] = y; }
       return pts;
     });
 
     function decodeDeltaRingToPath(path, raw) {
       let x = raw[0], y = raw[1];
       path.moveTo(x, y);
-      for (let i = 2; i < raw.length; i += 2) {
-        x += raw[i]; y += raw[i + 1];
-        path.lineTo(x, y);
-      }
+      for (let i = 2; i < raw.length; i += 2) { x += raw[i]; y += raw[i + 1]; path.lineTo(x, y); }
       path.closePath();
     }
 
@@ -541,7 +520,14 @@
     const INCHEON_PATH = new Path2D();
     for (const r of BUNDLE.context.incheon) decodeDeltaRingToPath(INCHEON_PATH, r);
 
-    // 602 Dongs
+    // Pre-merged single Path2D for ALL 602 행정동 borders (1 stroke instead of 602!)
+    const ALL_DONGS_PATH = new Path2D();
+    for (let a = 0; a < DECODED_ARCS.length; a++) {
+      const pts = DECODED_ARCS[a];
+      ALL_DONGS_PATH.moveTo(pts[0], pts[1]);
+      for (let i = 2; i < pts.length; i += 2) ALL_DONGS_PATH.lineTo(pts[i], pts[i + 1]);
+    }
+
     const DONGS = BUNDLE.dongs.map((d) => {
       const path = new Path2D();
       let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
@@ -588,60 +574,64 @@
       };
     });
 
-    // 47 SGGs
+    // Pre-merged single Path2D for ALL 47 시군구 borders (1 stroke instead of 47!)
+    const ALL_SGGS_PATH = new Path2D();
     const SGGS = BUNDLE.sggs.map((s, idx) => {
       const path = new Path2D();
       let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
       for (const r of s.rings) {
         let x = r[0], y = r[1];
         path.moveTo(x, y);
+        ALL_SGGS_PATH.moveTo(x, y);
         if (x < minX) minX = x; if (x > maxX) maxX = x;
         if (y < minY) minY = y; if (y > maxY) maxY = y;
         for (let i = 2; i < r.length; i += 2) {
           x += r[i]; y += r[i + 1];
           path.lineTo(x, y);
+          ALL_SGGS_PATH.lineTo(x, y);
           if (x < minX) minX = x; if (x > maxX) maxX = x;
           if (y < minY) minY = y; if (y > maxY) maxY = y;
         }
         path.closePath();
+        ALL_SGGS_PATH.closePath();
       }
       const memberDongs = DONGS.filter((d) => d.s === idx);
       return {
-        id: idx,
-        cd: s.code,
-        name: s.name,
-        nm: s.name,
-        sggName: "경기도",
-        fullName: s.name,
-        cx: s.cx,
-        cy: s.cy,
-        path,
-        bbox: [minX, minY, maxX, maxY],
-        dongs: memberDongs,
+        id: idx, cd: s.code, name: s.name, nm: s.name, sggName: "경기도", fullName: s.name,
+        shortName: s.name.replace(/시(?=[가-힣]+구$)/, " ").replace(/구$/, "").replace(/[시군]$/, ""),
+        cx: s.cx, cy: s.cy, path, bbox: [minX, minY, maxX, maxY], dongs: memberDongs,
         km2: Number(memberDongs.reduce((a, d) => a + d.km2, 0).toFixed(1)),
-        wd: new Array(24).fill(0),
-        we: new Array(24).fill(0),
-        g5: 60,
-        mix: [40, 25, 20, 15],
-        tp: "res",
-        typeLabel: "시·군·구",
+        wd: new Array(24).fill(0), we: new Array(24).fill(0), g5: 60, mix: [40, 25, 20, 15], tp: "res", typeLabel: "시·군·구",
       };
     });
 
+    // Pre-merged single Path2D for ALL 6 highways (2 strokes instead of 12!)
+    const ALL_HIGHWAYS_PATH = new Path2D();
+    const HW_SEGS = [];
+    for (const hw of BUNDLE.highways) {
+      for (let i = 0; i < hw.pts.length; i += 2) {
+        if (i === 0) ALL_HIGHWAYS_PATH.moveTo(hw.pts[i], hw.pts[i + 1]);
+        else ALL_HIGHWAYS_PATH.lineTo(hw.pts[i], hw.pts[i + 1]);
+      }
+      for (let i = 0; i < hw.pts.length - 2; i += 2) {
+        const x0 = hw.pts[i], y0 = hw.pts[i + 1], x1 = hw.pts[i + 2], y1 = hw.pts[i + 3];
+        HW_SEGS.push([x0, y0, x1, y1, Math.min(x0, x1) - 240, Math.min(y0, y1) - 240, Math.max(x0, x1) + 240, Math.max(y0, y1) + 240]);
+      }
+    }
+
     // -----------------------------------------------------------------------
-    // 2. Ultra-Granular 1km Hex Cell Lattice (11,286 cells) + 385m H3 Micro-Cells
+    // 2. Zero-Allocation 1km Hex Lattice (11,286 cells) + 385m H3 Micro-Cells
     // -----------------------------------------------------------------------
-    const HEX_R = BUNDLE.hexGrid.r; // 38 units ≈ 589m radius, 1.02km spacing
+    const HEX_R = BUNDLE.hexGrid.r;
     const HEX_DX = SQRT3 * HEX_R;
     const HEX_DY = 1.5 * HEX_R;
-    const HEX_VERTS = new Float32Array(12); // pointy-top 1km hex vertex offsets
+    const HEX_VERTS = new Float32Array(12);
     for (let k = 0; k < 6; k++) {
       const ang = (Math.PI / 3) * k - Math.PI / 6;
       HEX_VERTS[k * 2] = Math.cos(ang) * HEX_R * 1.015;
       HEX_VERTS[k * 2 + 1] = Math.sin(ang) * HEX_R * 1.015;
     }
 
-    // Aperture-7 H3-style 385m micro-hex geometry (exact seamless tiling!)
     const MICRO_R = HEX_R / Math.sqrt(7);
     const MICRO_D = SQRT3 * MICRO_R;
     const MICRO_PHI = -Math.atan(SQRT3 / 5);
@@ -657,18 +647,11 @@
       MICRO_VERTS[k * 2 + 1] = Math.sin(ang) * MICRO_R * 1.015;
     }
 
-    // Highway segments in quantized map space for fast distance queries
-    const HW_SEGS = [];
-    for (const hw of BUNDLE.highways) {
-      for (let i = 0; i < hw.pts.length - 2; i += 2) {
-        HW_SEGS.push([hw.pts[i], hw.pts[i + 1], hw.pts[i + 2], hw.pts[i + 3]]);
-      }
-    }
-
     function distToHighwayUnits(x, y) {
-      let bestSq = 1e12;
+      let bestSq = 999999;
       for (let i = 0; i < HW_SEGS.length; i++) {
         const s = HW_SEGS[i];
+        if (x < s[4] || x > s[6] || y < s[5] || y > s[7]) continue;
         const dx = s[2] - s[0], dy = s[3] - s[1];
         const l2 = dx * dx + dy * dy;
         let t = l2 > 0 ? ((x - s[0]) * dx + (y - s[1]) * dy) / l2 : 0;
@@ -677,11 +660,10 @@
         const d2 = px * px + py * py;
         if (d2 < bestSq) bestSq = d2;
       }
-      return Math.sqrt(bestSq);
+      return bestSq < 999999 ? Math.sqrt(bestSq) : 999;
     }
 
-    // Spatial bucket index over 129 sub-anchors for ~15ms synthesis of 11,286 cells
-    const ANCHORS = BUNDLE.model.anchors; // [qx, qy, typeIdx, radU, weight, name]
+    const ANCHORS = BUNDLE.model.anchors;
     const ANC_BUCKET = 500;
     const anchorBuckets = new Map();
     for (let i = 0; i < ANCHORS.length; i++) {
@@ -707,6 +689,11 @@
     const MODEL_HW_WE = BUNDLE.model.hwWe;
     const SEOUL_CX = BUNDLE.meta.seoulCenter[0];
     const SEOUL_CY = BUNDLE.meta.seoulCenter[1];
+    const G5_BASE = [76, 62, 72, 64, 54, 73, 43];
+    const MIX_TEMPLATES = [
+      [26, 22, 40, 12], [32, 24, 30, 14], [38, 30, 14, 18],
+      [52, 26, 12, 10], [34, 28, 8, 30], [48, 30, 14, 8], [40, 26, 10, 24]
+    ];
 
     function fastHash2D(x, y) {
       let n = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263);
@@ -714,112 +701,90 @@
       return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
     }
 
-    // Compute exact spatially-varying 24h weekday/weekend profile at ANY point (wx, wy) inside parent dong `did`
-    function computePointProfile(wx, wy, did, scaleMult = 1.0) {
+    const scratchW = new Float64Array(7);
+    function fillPointProfile(wx, wy, did, scaleMult, outWd, outWe, outOffset) {
       const dong = DONGS[did];
-      const wArr = [0, 0, 0, 0, 0, 0, 0];
-      let bestAncIdx = -1;
-      let bestScore = 0;
+      scratchW.fill(0);
+      let bestAncIdx = -1, bestScore = 0;
 
       const bk = anchorBuckets.get(Math.floor(wx / ANC_BUCKET) * 64 + Math.floor(wy / ANC_BUCKET));
       if (bk) {
         for (let j = 0; j < bk.length; j++) {
           const ai = bk[j];
           const a = ANCHORS[ai];
-          const dx = wx - a[0], dy = wy - a[1];
-          const rad = a[3];
-          const d2 = dx * dx + dy * dy;
-          if (d2 < rad * rad * 7.8) {
-            const infl = a[4] * Math.exp(-0.5 * d2 / (rad * rad));
-            wArr[a[2]] += infl;
+          const dx = wx - a[0], dy = wy - a[1], rad = a[3];
+          const d2 = dx * dx + dy * dy, r2 = rad * rad;
+          if (d2 < r2 * 7.8) {
+            const infl = a[4] * Math.exp(-0.5 * d2 / r2);
+            scratchW[a[2]] += infl;
             if (infl > bestScore) { bestScore = infl; bestAncIdx = ai; }
           }
         }
       }
 
-      // Baseline urban/rural background from parent dong
-      const isMyeon = dong.nm.endsWith("면");
-      const isEup = dong.nm.endsWith("읍");
-      if (isMyeon) wArr[6] += 0.65;
-      else if (isEup) { wArr[6] += 0.25; wArr[3] += 0.35; }
-      else wArr[3] += 0.38;
+      const lastCh = dong.nm.charCodeAt(dong.nm.length - 1);
+      const isMyeon = lastCh === 47732; // '면'
+      const isEup = lastCh === 51021;   // '읍'
+      if (isMyeon) scratchW[6] += 0.65;
+      else if (isEup) { scratchW[6] += 0.25; scratchW[3] += 0.35; }
+      else scratchW[3] += 0.38;
 
-      let totalW = 0;
-      let topTp = 6, topW = -1;
+      let totalW = 0, topTp = 6, topW = -1;
       for (let t = 0; t < 7; t++) {
-        totalW += wArr[t];
-        if (wArr[t] > topW) { topW = wArr[t]; topTp = t; }
+        totalW += scratchW[t];
+        if (scratchW[t] > topW) { topW = scratchW[t]; topTp = t; }
       }
-      if (totalW < 1e-5) { wArr[6] = 1; totalW = 1; topTp = 6; }
+      if (totalW < 1e-5) { scratchW[6] = 1; totalW = 1; topTp = 6; }
+      const invW = 1.0 / totalW;
 
       const dHw = distToHighwayUnits(wx, wy);
-      // Crisp highway corridor ribbon (~1.1 km width = ~70 units)
-      const hwW = 0.48 * Math.exp(-0.5 * (dHw / 56) * (dHw / 56));
+      const hwW = dHw < 220 ? 0.48 * Math.exp(-0.5 * (dHw / 56) * (dHw / 56)) : 0;
       const dSeoul = Math.hypot(wx - SEOUL_CX, wy - SEOUL_CY) * KM_PER_UNIT;
       const metro = Math.exp(-dSeoul / 36.0);
 
       const hSeed = fastHash2D(Math.round(wx), Math.round(wy));
-      const jitter = 0.84 + 0.32 * hSeed;
-      const anchorBoost = 1.0 + 1.25 * Math.min(bestScore, 2.4) + 0.65 * hwW;
-      const baseCell = (0.28 + 1.55 * metro) * anchorBoost * jitter * (isMyeon ? 0.42 : isEup ? 0.72 : 1.0) * scaleMult;
-
-      const wd = new Float32Array(24);
-      const we = new Float32Array(24);
+      const baseCell = (0.28 + 1.55 * metro) * (1.0 + 1.25 * Math.min(bestScore, 2.4) + 0.65 * hwW)
+        * (0.84 + 0.32 * hSeed) * (isMyeon ? 0.42 : isEup ? 0.72 : 1.0) * scaleMult;
       const phase = (hSeed - 0.5) * 0.14;
+      const sWd = dong.scaleRatioWd, sWe = dong.scaleRatioWe;
+      const keepHw = 1 - hwW * 0.55;
+
+      let sumWd = 0, sumWe = 0;
       for (let h = 0; h < 24; h++) {
         let vWd = 0, vWe = 0;
         for (let t = 0; t < 7; t++) {
-          if (wArr[t] > 0) {
-            const sh = wArr[t] / totalW;
+          const wt = scratchW[t];
+          if (wt > 0) {
+            const sh = wt * invW;
             vWd += sh * MODEL_WD[t][h];
             vWe += sh * MODEL_WE[t][h];
           }
         }
-        vWd = vWd * (1 - hwW * 0.55) + hwW * MODEL_HW_WD[h];
-        vWe = vWe * (1 - hwW * 0.55) + hwW * MODEL_HW_WE[h];
-        const microWave = 1.0 + 0.06 * Math.sin((h + hSeed * 12) * 0.75) + phase * Math.cos(h * 0.5);
-        wd[h] = Math.max(0.02, baseCell * vWd * microWave * dong.scaleRatioWd[h]);
-        we[h] = Math.max(0.02, baseCell * vWe * microWave * dong.scaleRatioWe[h]);
+        vWd = vWd * keepHw + hwW * MODEL_HW_WD[h];
+        vWe = vWe * keepHw + hwW * MODEL_HW_WE[h];
+        const mw = 1.0 + 0.06 * Math.sin((h + hSeed * 12) * 0.75) + phase * Math.cos(h * 0.5);
+        const fWd = Math.max(0.02, baseCell * vWd * mw * sWd[h]);
+        const fWe = Math.max(0.02, baseCell * vWe * mw * sWe[h]);
+        outWd[outOffset + h] = fWd;
+        outWe[outOffset + h] = fWe;
+        sumWd += fWd; sumWe += fWe;
       }
 
-      const g5Base = [76, 62, 72, 64, 54, 73, 43][topTp];
-      const g5 = Math.round(Math.max(30, Math.min(89, g5Base + 8 * metro + (hSeed - 0.5) * 8)));
-      const mixTemplates = [
-        [26, 22, 40, 12], [32, 24, 30, 14], [38, 30, 14, 18],
-        [52, 26, 12, 10], [34, 28, 8, 30], [48, 30, 14, 8], [40, 26, 10, 24]
-      ];
-      const mix = mixTemplates[topTp].slice();
+      const g5 = Math.round(Math.max(30, Math.min(89, G5_BASE[topTp] + 8 * metro + (hSeed - 0.5) * 8)));
+      const mix = MIX_TEMPLATES[topTp].slice();
       if (hwW > 0.16) {
         const sh = Math.min(12, Math.round(hwW * 28));
-        mix[3] += sh;
-        mix[0] = Math.max(12, mix[0] - sh);
+        mix[3] += sh; mix[0] = Math.max(12, mix[0] - sh);
       }
-
-      let avgWd = 0, avgWe = 0;
-      for (let h = 0; h < 24; h++) { avgWd += wd[h]; avgWe += we[h]; }
-      avgWd /= 24; avgWe /= 24;
-
-      return {
-        tp: TYPE_KEYS[topTp],
-        typeLabel: TYPE_LABELS[TYPE_KEYS[topTp]],
-        anc: bestScore >= 0.35 && bestAncIdx !== -1 ? ANCHORS[bestAncIdx][5] : (hwW > 0.24 ? "고속도로 이동 축" : dong.anc),
-        g5,
-        mix,
-        wd,
-        we,
-        avgWd,
-        avgWe,
-      };
+      const anc = bestScore >= 0.35 && bestAncIdx !== -1 ? ANCHORS[bestAncIdx][5] : (hwW > 0.24 ? "고속도로 이동 축" : dong.anc);
+      return { topTp, g5, mix, anc, avgWd: sumWd / 24, avgWe: sumWe / 24 };
     }
 
-    // Unpack RLE 1km Hex Grid -> 11,286 cells stored in ultra-fast typed structures
     const HEX_COUNT = BUNDLE.hexGrid.count;
-    const cellX = new Float32Array(HEX_COUNT);
-    const cellY = new Float32Array(HEX_COUNT);
-    const cellCol = new Int16Array(HEX_COUNT);
-    const cellRow = new Int16Array(HEX_COUNT);
+    const cellXY = new Float32Array(HEX_COUNT * 2); // interleaved [x, y] directly uploadable to WebGL2 VBO!
     const cellDong = new Int16Array(HEX_COUNT);
     const cellSgg = new Uint8Array(HEX_COUNT);
+    const cellSggFloat = new Float32Array(HEX_COUNT); // for WebGL2 sgg filter attribute
     const cellTpIdx = new Uint8Array(HEX_COUNT);
     const cellG5 = new Uint8Array(HEX_COUNT);
     const cellWd = new Float32Array(HEX_COUNT * 24);
@@ -829,6 +794,11 @@
     const cellAncName = new Array(HEX_COUNT);
     const cellMix = new Array(HEX_COUNT);
     const cellByKey = new Map();
+
+    // Cached per-cell normalized metric & delta (recomputed ONLY on time/metric change, ZERO work during pan/zoom!)
+    const cellNormCache = new Float32Array(HEX_COUNT);
+    const cellDeltaCache = new Float32Array(HEX_COUNT);
+    const cellVolCache = new Float32Array(HEX_COUNT);
 
     function buildHexCells() {
       const runs = BUNDLE.hexGrid.runs;
@@ -841,61 +811,47 @@
         for (let k = 0; k < len; k++) {
           const col = c0 + k;
           const x = xOff + col * HEX_DX;
-          cellX[idx] = x;
-          cellY[idx] = y;
-          cellCol[idx] = col;
-          cellRow[idx] = row;
+          cellXY[idx * 2] = x;
+          cellXY[idx * 2 + 1] = y;
           cellDong[idx] = did;
           cellSgg[idx] = sggId;
+          cellSggFloat[idx] = sggId;
           cellByKey.set((row << 10) | col, idx);
 
-          const prof = computePointProfile(x, y, did, 1.0);
-          cellTpIdx[idx] = TYPE_KEYS.indexOf(prof.tp);
-          cellG5[idx] = prof.g5;
-          cellAncName[idx] = prof.anc;
-          cellMix[idx] = prof.mix;
-          const off = idx * 24;
-          for (let h = 0; h < 24; h++) {
-            cellWd[off + h] = prof.wd[h];
-            cellWe[off + h] = prof.we[h];
-          }
-          cellAvgWd[idx] = prof.avgWd;
-          cellAvgWe[idx] = prof.avgWe;
+          const meta = fillPointProfile(x, y, did, 1.0, cellWd, cellWe, idx * 24);
+          cellTpIdx[idx] = meta.topTp;
+          cellG5[idx] = meta.g5;
+          cellAncName[idx] = meta.anc;
+          cellMix[idx] = meta.mix;
+          cellAvgWd[idx] = meta.avgWd;
+          cellAvgWe[idx] = meta.avgWe;
           idx++;
         }
       }
     }
     buildHexCells();
 
-    // Dynamic 385m H3 Micro-Cell LRU Cache (key = parentCellIdx -> array of 7 child micro-cell objects)
+    // Dynamic 385m H3 Micro-Cell LRU Cache
     const microCache = new Map();
     function getMicroChildren(parentIdx) {
       let cached = microCache.get(parentIdx);
       if (cached) return cached;
-      const px = cellX[parentIdx], py = cellY[parentIdx], did = cellDong[parentIdx];
+      const px = cellXY[parentIdx * 2], py = cellXY[parentIdx * 2 + 1], did = cellDong[parentIdx];
+      const sgg = cellSgg[parentIdx];
       const children = new Array(7);
       for (let k = 0; k < 7; k++) {
-        const mx = px + MICRO_OFFSETS[k][0];
-        const my = py + MICRO_OFFSETS[k][1];
-        const prof = computePointProfile(mx, my, did, 1 / 7);
+        const mx = px + MICRO_OFFSETS[k][0], my = py + MICRO_OFFSETS[k][1];
+        const wd = new Float32Array(24), we = new Float32Array(24);
+        const meta = fillPointProfile(mx, my, did, 1 / 7, wd, we, 0);
         children[k] = {
-          parentIdx,
-          subIdx: k,
-          id: parentIdx * 7 + k,
-          x: mx,
-          y: my,
-          did,
-          sgg: cellSgg[parentIdx],
-          ...prof,
+          parentIdx, subIdx: k, id: parentIdx * 7 + k, x: mx, y: my, did, sgg,
+          tp: TYPE_KEYS[meta.topTp], typeLabel: TYPE_LABELS[TYPE_KEYS[meta.topTp]],
+          anc: meta.anc, g5: meta.g5, mix: meta.mix, wd, we, avgWd: meta.avgWd, avgWe: meta.avgWe,
         };
       }
       if (microCache.size > 1600) {
-        // Evict oldest 400 entries to keep memory minimal on smartphones
         let n = 0;
-        for (const key of microCache.keys()) {
-          microCache.delete(key);
-          if (++n >= 400) break;
-        }
+        for (const key of microCache.keys()) { microCache.delete(key); if (++n >= 400) break; }
       }
       microCache.set(parentIdx, children);
       return children;
@@ -909,10 +865,7 @@
         const tpCount = {};
         for (const d of s.dongs) {
           let dAvg = 0;
-          for (let h = 0; h < 24; h++) {
-            s.wd[h] += d.wd[h]; s.we[h] += d.we[h];
-            dAvg += d.wd[h];
-          }
+          for (let h = 0; h < 24; h++) { s.wd[h] += d.wd[h]; s.we[h] += d.we[h]; dAvg += d.wd[h]; }
           dAvg /= 24;
           g5Sum += d.g5 * dAvg;
           for (let m = 0; m < 4; m++) mixSum[m] += d.mix[m] * dAvg;
@@ -929,47 +882,41 @@
         s.tp = topTp ? topTp[0] : "res";
         s.typeLabel = (TYPE_LABELS[s.tp] || "복합") + " 중심";
       }
-
       PROVINCE_TOTAL.wd = new Array(24).fill(0);
       PROVINCE_TOTAL.we = new Array(24).fill(0);
       for (const d of DONGS) {
-        for (let h = 0; h < 24; h++) {
-          PROVINCE_TOTAL.wd[h] += d.wd[h];
-          PROVINCE_TOTAL.we[h] += d.we[h];
-        }
+        for (let h = 0; h < 24; h++) { PROVINCE_TOTAL.wd[h] += d.wd[h]; PROVINCE_TOTAL.we[h] += d.we[h]; }
       }
     }
-
     const PROVINCE_TOTAL = { wd: [], we: [] };
     recomputeAggregates();
 
     // -----------------------------------------------------------------------
-    // 3. Application State & Smooth 15-Minute / 1-Hour Catmull-Rom Engine
+    // 3. State & Spline Metric Engine
     // -----------------------------------------------------------------------
     const state = {
-      metric: "deltaPct", // 'deltaPct' | 'deltaAbs' | 'vsAvg' | 'volume'
-      day: "wd",          // 'wd' | 'we'
-      level: "cell",      // 'cell' | 'dong' | 'sgg'
-      timeStepMin: 15,    // 15 (96 slots) | 60 (24 slots)
-      hour: 8.25,         // 08:15 default (crisp morning rush!)
+      metric: "deltaPct",
+      day: "wd",
+      level: "cell",
+      timeStepMin: 15,
+      hour: 8.25,
       playing: false,
       speed: 1.0,
       rankTab: "surge",
-      layers: {
-        micro: true,
-        pulse: true,
-        highway: true,
-        landmarks: false,
-        dongBorder: false,
-        sggBorder: true,
-      },
+      layers: { micro: true, pulse: true, highway: true, landmarks: false, dongBorder: false, sggBorder: true },
       filterSgg: -1,
-      hovered: null,      // { kind: 'cell'|'micro'|'dong'|'sgg', id, parentIdx?, subIdx? }
-      selected: null,     // same shape
+      hovered: null,
+      selected: null,
       customDataName: null,
       cam: { scale: 0.08, ox: 0, oy: 0 },
       camTarget: null,
       pulsePhase: 0,
+      // Dirty flags for zero-waste rendering!
+      dirtyMetrics: true,
+      dirtyRamp: true,
+      dirtyGL: true,
+      dirtyVec: true,
+      dirtyFX: true,
     };
 
     const HOUR_PHASES_WD = [
@@ -985,24 +932,19 @@
       "저녁 상권·귀가", "저녁 주거지 회귀", "주말 저녁 피크", "야간 콘텐츠 피크", "심야 안정화", "자정 전환"
     ];
 
-    // Cyclic Catmull-Rom spline evaluation on 24-hour arrays for smooth, realistic 15-minute curves
     function evalCurve24(arr, offset, hourFloat) {
       const hWrap = ((hourFloat % 24) + 24) % 24;
       const i1 = Math.floor(hWrap);
       const t = hWrap - i1;
       if (t < 1e-4) return arr[offset + i1];
-      const i0 = (i1 + 23) % 24;
-      const i2 = (i1 + 1) % 24;
-      const i3 = (i1 + 2) % 24;
+      const i0 = (i1 + 23) % 24, i2 = (i1 + 1) % 24, i3 = (i1 + 2) % 24;
       const p0 = arr[offset + i0], p1 = arr[offset + i1], p2 = arr[offset + i2], p3 = arr[offset + i3];
       const t2 = t * t, t3 = t2 * t;
       const v = 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
       return v > 0.005 ? v : 0.005;
     }
 
-    function getDeltaStepHours() {
-      return state.timeStepMin === 15 ? 0.25 : 1.0;
-    }
+    function getDeltaStepHours() { return state.timeStepMin === 15 ? 0.25 : 1.0; }
 
     function getMetricsFromArray(arr, offset, avg, hourFloat) {
       const dtH = getDeltaStepHours();
@@ -1017,26 +959,15 @@
     function getRegionMetrics(item, hourFloat, dayKey) {
       return getMetricsFromArray(item[dayKey], 0, dayKey === "wd" ? item.avgWd : item.avgWe, hourFloat);
     }
-
     function getCellMetrics(cIdx, hourFloat, dayKey) {
-      const arr = dayKey === "wd" ? cellWd : cellWe;
-      const avg = dayKey === "wd" ? cellAvgWd[cIdx] : cellAvgWe[cIdx];
-      return getMetricsFromArray(arr, cIdx * 24, avg, hourFloat);
+      return getMetricsFromArray(dayKey === "wd" ? cellWd : cellWe, cIdx * 24, dayKey === "wd" ? cellAvgWd[cIdx] : cellAvgWe[cIdx], hourFloat);
     }
-
     function getMicroMetrics(mc, hourFloat, dayKey) {
       return getMetricsFromArray(mc[dayKey], 0, dayKey === "wd" ? mc.avgWd : mc.avgWe, hourFloat);
     }
 
-    function isMicroActive() {
-      if (state.level !== "cell" || !state.layers.micro) return false;
-      const w = mapStage.clientWidth || 800, h = mapStage.clientHeight || 600;
-      const zoomLevel = state.cam.scale / (Math.min(w, h) / MAP_H);
-      return zoomLevel >= 3.6;
-    }
-
     // -----------------------------------------------------------------------
-    // 4. Color Ramps & 40-Bucket Fast Batched Palette
+    // 4. Color Ramps & Cached Normalization
     // -----------------------------------------------------------------------
     function isLightTheme() {
       if (document.documentElement.classList.contains("light")) return true;
@@ -1051,33 +982,22 @@
       return false;
     }
 
-    const DIV_LIGHT = [
-      [15, 76, 156], [56, 134, 212], [172, 212, 240], [235, 238, 242],
-      [253, 208, 152], [239, 108, 34], [172, 18, 28],
-    ];
-    const DIV_DARK = [
-      [24, 118, 218], [42, 157, 214], [38, 86, 122], [38, 45, 56],
-      [130, 74, 34], [234, 108, 26], [224, 46, 46],
-    ];
-    const SEQ_LIGHT = [
-      [245, 247, 242], [254, 235, 160], [253, 174, 97],
-      [244, 109, 67], [205, 38, 38], [122, 16, 28],
-    ];
-    const SEQ_DARK = [
-      [25, 34, 46], [24, 84, 108], [22, 148, 136],
-      [230, 178, 44], [239, 104, 36], [224, 42, 42],
-    ];
+    const DIV_LIGHT = [[15, 76, 156], [56, 134, 212], [172, 212, 240], [235, 238, 242], [253, 208, 152], [239, 108, 34], [172, 18, 28]];
+    const DIV_DARK = [[24, 118, 218], [42, 157, 214], [38, 86, 122], [38, 45, 56], [130, 74, 34], [234, 108, 26], [224, 46, 46]];
+    const SEQ_LIGHT = [[245, 247, 242], [254, 235, 160], [253, 174, 97], [244, 109, 67], [205, 38, 38], [122, 16, 28]];
+    const SEQ_DARK = [[25, 34, 46], [24, 84, 108], [22, 148, 136], [230, 178, 44], [239, 104, 36], [224, 42, 42]];
 
-    function lerpRgb(c1, c2, t) {
-      const k = Math.max(0, Math.min(1, t));
-      return `rgb(${Math.round(c1[0] + (c2[0] - c1[0]) * k)},${Math.round(c1[1] + (c2[1] - c1[1]) * k)},${Math.round(c1[2] + (c2[2] - c1[2]) * k)})`;
+    function sampleStopsRgb(stops, t) {
+      const c = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+      const i = Math.min(stops.length - 2, Math.floor(c));
+      const f = c - i;
+      const a = stops[i], b = stops[i + 1];
+      return [Math.round(a[0] + (b[0] - a[0]) * f), Math.round(a[1] + (b[1] - a[1]) * f), Math.round(a[2] + (b[2] - a[2]) * f)];
     }
 
-    function sampleStops(stops, t) {
-      const clamped = Math.max(0, Math.min(1, t));
-      const scaled = clamped * (stops.length - 1);
-      const idx = Math.min(stops.length - 2, Math.floor(scaled));
-      return lerpRgb(stops[idx], stops[idx + 1], scaled - idx);
+    function sampleStopsCss(stops, t) {
+      const [r, g, b] = sampleStopsRgb(stops, t);
+      return `rgb(${r},${g},${b})`;
     }
 
     function getMetricDomain(forceMicro = false) {
@@ -1090,11 +1010,16 @@
       if (state.metric === "deltaAbs") {
         let cap = state.level === "sgg" ? 60 : state.level === "dong" ? 8 : (micro ? 0.28 : 1.8);
         if (is15) cap *= 0.35;
-        return { min: -cap, max: cap, diverging: true, unit: cap < 1 ? " Gbps" : " Gbps" };
+        return { min: -cap, max: cap, diverging: true, unit: " Gbps" };
       }
       if (state.metric === "vsAvg") return { min: -75, max: 75, diverging: true, unit: "%" };
       const cap = state.level === "sgg" ? 550 : state.level === "dong" ? 36 : (micro ? 1.4 : 8.5);
       return { min: 0, max: cap, diverging: false, unit: " Gbps" };
+    }
+
+    function normalizeMetric(val, domain) {
+      if (domain.diverging) return Math.max(0, Math.min(1, (val - domain.min) / (domain.max - domain.min)));
+      return Math.pow(Math.max(0, Math.min(1, val / domain.max)), 0.70);
     }
 
     function getMetricValue(m) {
@@ -1104,104 +1029,787 @@
       return m.cur;
     }
 
-    const BUCKET_N = 40;
-    function getBucketPalette(domain, light) {
-      const stops = domain.diverging ? (light ? DIV_LIGHT : DIV_DARK) : (light ? SEQ_LIGHT : SEQ_DARK);
-      const pal = new Array(BUCKET_N);
-      for (let i = 0; i < BUCKET_N; i++) {
-        pal[i] = sampleStops(stops, i / (BUCKET_N - 1));
-      }
-      return pal;
-    }
-
-    function bucketIndex(val, domain) {
-      let norm;
-      if (domain.diverging) {
-        norm = (val - domain.min) / (domain.max - domain.min);
-      } else {
-        norm = Math.pow(Math.max(0, Math.min(1, val / domain.max)), 0.70);
-      }
-      const bi = Math.floor(Math.max(0, Math.min(0.9999, norm)) * BUCKET_N);
-      return bi;
-    }
-
-    function colorForValue(val, domain, light) {
-      const stops = domain.diverging ? (light ? DIV_LIGHT : DIV_DARK) : (light ? SEQ_LIGHT : SEQ_DARK);
-      if (domain.diverging) return sampleStops(stops, (val - domain.min) / (domain.max - domain.min));
-      return sampleStops(stops, Math.pow(Math.max(0, Math.min(1, val / domain.max)), 0.70));
-    }
-
     function formatSigned(val, decimals = 1, suffix = "") {
-      const sign = val > 0.0005 ? "+" : "";
-      return `${sign}${val.toFixed(decimals)}${suffix}`;
+      return `${val > 0.0005 ? "+" : ""}${val.toFixed(decimals)}${suffix}`;
     }
-
     function formatTraffic(gbps) {
-      if (gbps < 1.0) return `${Math.round(gbps * 1000)} Mbps`;
-      return `${gbps.toFixed(2)} Gbps`;
+      return gbps < 1.0 ? `${Math.round(gbps * 1000)} Mbps` : `${gbps.toFixed(2)} Gbps`;
     }
-
     function formatDeltaTraffic(dg) {
-      if (Math.abs(dg) < 0.8) return `${dg >= 0 ? "+" : ""}${Math.round(dg * 1000)}M`;
-      return `${formatSigned(dg, 2)}G`;
+      return Math.abs(dg) < 0.8 ? `${dg >= 0 ? "+" : ""}${Math.round(dg * 1000)}M` : `${formatSigned(dg, 2)}G`;
     }
-
     function deltaColorClass(val) {
       const th = state.timeStepMin === 15 ? 0.6 : 2.0;
-      if (val >= th) return "text-[#ea580c]";
-      if (val <= -th) return "text-[#2563eb]";
-      return "text-[var(--muted-foreground)]";
+      return val >= th ? "text-[#ea580c]" : val <= -th ? "text-[#2563eb]" : "text-[var(--muted-foreground)]";
     }
-
     function formatClock(hourFloat) {
       const totalMin = Math.round((((hourFloat % 24) + 24) % 24) * 60) % (24 * 60);
-      const hh = Math.floor(totalMin / 60);
-      const mm = totalMin % 60;
-      return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+      return `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
     }
 
     // -----------------------------------------------------------------------
-    // 5. Canvas Map Renderer & Camera Control (60 FPS Color-Bucketed Hexes!)
+    // 5. WebGL2 Hardware-Accelerated Instanced SDF Hexagon Renderer!
     // -----------------------------------------------------------------------
     const mapStage = document.getElementById("mapStage");
-    const mapCanvas = document.getElementById("mapCanvas");
-    const ctx = mapCanvas.getContext("2d");
+    const glCanvas = document.getElementById("glCanvas");
+    const vectorCanvas = document.getElementById("vectorCanvas");
+    const fxCanvas = document.getElementById("fxCanvas");
+    const vctx = vectorCanvas.getContext("2d");
+    const fxctx = fxCanvas.getContext("2d");
+
+    function createWebGLHexEngine(canvas) {
+      const gl = canvas.getContext("webgl2", { alpha: true, antialias: true, depth: false, preserveDrawingBuffer: false, powerPreference: "high-performance" });
+      if (!gl) return null;
+
+      const vsSrc = `#version 300 es
+        precision highp float;
+        layout(location = 0) in vec2 aUnitHex;
+        layout(location = 1) in vec2 aCenter;
+        layout(location = 2) in float aVal;
+        layout(location = 3) in float aSgg;
+
+        uniform sampler2D uRamp;
+        uniform vec2 uViewport;
+        uniform vec3 uCam;       // (scale, ox, oy)
+        uniform float uRadius;
+        uniform mat2 uRot;
+        uniform float uFilterSgg;
+
+        out vec2 vLocal;
+        out vec3 vColor;
+        out float vAlpha;
+
+        void main() {
+          vec2 local = aUnitHex * uRadius;
+          vec2 world = aCenter + uRot * local;
+          vec2 screen = world * uCam.x + uCam.yz;
+          vec2 ndc = (screen / uViewport) * 2.0 - 1.0;
+          gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);
+          vLocal = local;
+          vColor = texture(uRamp, vec2(clamp(aVal, 0.0, 1.0), 0.5)).rgb;
+          vAlpha = (uFilterSgg < -0.5 || abs(aSgg - uFilterSgg) < 0.5) ? 1.0 : 0.22;
+        }
+      `;
+
+      const fsSrc = `#version 300 es
+        precision highp float;
+        in vec2 vLocal;
+        in vec3 vColor;
+        in float vAlpha;
+
+        uniform float uInradius;
+        uniform float uScale;
+        uniform float uBorderAlpha;
+        uniform vec3 uBorderColor;
+
+        out vec4 fragColor;
+
+        float sdHexPointy(vec2 p, float inrad) {
+          const vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
+          p = abs(p.yx);
+          p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
+          p -= vec2(clamp(p.x, -k.z * inrad, k.z * inrad), inrad);
+          return length(p) * sign(p.y);
+        }
+
+        void main() {
+          if (uBorderAlpha <= 0.001) {
+            fragColor = vec4(vColor, vAlpha);
+            return;
+          }
+          float pxD = sdHexPointy(vLocal, uInradius) * uScale;
+          float b = smoothstep(-1.1, -0.1, pxD) * uBorderAlpha;
+          fragColor = vec4(mix(vColor, uBorderColor, b), vAlpha);
+        }
+      `;
+
+      function compile(type, src) {
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+          console.error(gl.getShaderInfoLog(sh));
+          return null;
+        }
+        return sh;
+      }
+
+      const vs = compile(gl.VERTEX_SHADER, vsSrc);
+      const fs = compile(gl.FRAGMENT_SHADER, fsSrc);
+      if (!vs || !fs) return null;
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs); gl.attachShader(prog, fs);
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+
+      // Exact pointy-top unit hexagon as 4 triangles (12 vertices, zero wasted corner pixels!)
+      const hx = new Float32Array(12);
+      for (let k = 0; k < 6; k++) {
+        const a = (Math.PI / 3) * k - Math.PI / 6;
+        hx[k * 2] = Math.cos(a);
+        hx[k * 2 + 1] = Math.sin(a);
+      }
+      const hexTris = new Float32Array([
+        hx[0], hx[1], hx[2], hx[3], hx[4], hx[5],
+        hx[0], hx[1], hx[4], hx[5], hx[6], hx[7],
+        hx[0], hx[1], hx[6], hx[7], hx[8], hx[9],
+        hx[0], hx[1], hx[8], hx[9], hx[10], hx[11],
+      ]);
+      const quadBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, hexTris, gl.STATIC_DRAW);
+
+      // 1km static cell VAO (centers & sgg stay resident in GPU VRAM!)
+      const vao1k = gl.createVertexArray();
+      gl.bindVertexArray(vao1k);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      const center1kBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, center1kBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, cellXY, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(1, 1);
+
+      const val1kBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, val1kBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, HEX_COUNT * 4, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(2, 1);
+
+      const sgg1kBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, sgg1kBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, cellSggFloat, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(3);
+      gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(3, 1);
+
+      // Dynamic 385m micro-cell VAO (reusable typed buffers for visible micro-hexes!)
+      const MAX_MICRO = 8192;
+      const microXYBufData = new Float32Array(MAX_MICRO * 2);
+      const microValBufData = new Float32Array(MAX_MICRO);
+      const microSggBufData = new Float32Array(MAX_MICRO);
+
+      const vaoMicro = gl.createVertexArray();
+      gl.bindVertexArray(vaoMicro);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      const centerMicroBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, centerMicroBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, MAX_MICRO * 8, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(1, 1);
+
+      const valMicroBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, valMicroBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, MAX_MICRO * 4, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(2, 1);
+
+      const sggMicroBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, sggMicroBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, MAX_MICRO * 4, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(3);
+      gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(3, 1);
+
+      gl.bindVertexArray(null);
+
+      // 256x1 RGBA color ramp texture
+      const rampTex = gl.createTexture();
+      const rampPixels = new Uint8Array(256 * 4);
+      gl.bindTexture(gl.TEXTURE_2D, rampTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      const locs = {
+        uViewport: gl.getUniformLocation(prog, "uViewport"),
+        uCam: gl.getUniformLocation(prog, "uCam"),
+        uRadius: gl.getUniformLocation(prog, "uRadius"),
+        uInradius: gl.getUniformLocation(prog, "uInradius"),
+        uScale: gl.getUniformLocation(prog, "uScale"),
+        uRot: gl.getUniformLocation(prog, "uRot"),
+        uFilterSgg: gl.getUniformLocation(prog, "uFilterSgg"),
+        uBorderAlpha: gl.getUniformLocation(prog, "uBorderAlpha"),
+        uBorderColor: gl.getUniformLocation(prog, "uBorderColor"),
+        uRamp: gl.getUniformLocation(prog, "uRamp"),
+      };
+
+      const ROT_IDENTITY = new Float32Array([1, 0, 0, 1]);
+      const cPhi = Math.cos(MICRO_PHI + Math.PI / 6 + Math.PI / 6); // align pointy-top SDF with H3 child hex angle
+      // Child hex vertices are at MICRO_PHI + 30° + k*60°; pointy-top hex vertices are at -30° + k*60° -> rotation = MICRO_PHI + 60° (equiv to MICRO_PHI!)
+      const cM = Math.cos(MICRO_PHI), sM = Math.sin(MICRO_PHI);
+      const ROT_MICRO = new Float32Array([cM, sM, -sM, cM]);
+
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+      return {
+        gl,
+        uploadRamp(stops) {
+          for (let i = 0; i < 256; i++) {
+            const [r, g, b] = sampleStopsRgb(stops, i / 255);
+            rampPixels[i * 4] = r; rampPixels[i * 4 + 1] = g; rampPixels[i * 4 + 2] = b; rampPixels[i * 4 + 3] = 255;
+          }
+          gl.bindTexture(gl.TEXTURE_2D, rampTex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, rampPixels);
+        },
+        upload1kValues(valsFloat32) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, val1kBuf);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, valsFloat32);
+        },
+        clear() {
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+        },
+        draw1k(w, h, scale, ox, oy, filterSgg, zoomLevel, light) {
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          gl.useProgram(prog);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, rampTex);
+          gl.uniform1i(locs.uRamp, 0);
+          gl.uniform2f(locs.uViewport, w, h);
+          gl.uniform3f(locs.uCam, scale, ox, oy);
+          gl.uniform1f(locs.uRadius, HEX_R * 1.01);
+          gl.uniform1f(locs.uInradius, HEX_R * SQRT3 * 0.5 * 1.01);
+          gl.uniform1f(locs.uScale, scale);
+          gl.uniformMatrix2fv(locs.uRot, false, ROT_IDENTITY);
+          gl.uniform1f(locs.uFilterSgg, filterSgg);
+          gl.uniform1f(locs.uBorderAlpha, zoomLevel >= 1.55 ? 0.16 : 0.0);
+          if (light) gl.uniform3f(locs.uBorderColor, 0.06, 0.09, 0.16);
+          else gl.uniform3f(locs.uBorderColor, 1.0, 1.0, 1.0);
+          gl.bindVertexArray(vao1k);
+          gl.drawArraysInstanced(gl.TRIANGLES, 0, 12, HEX_COUNT);
+          gl.bindVertexArray(null);
+        },
+        drawMicro(w, h, scale, ox, oy, filterSgg, light, domain) {
+          const viewMinX = -ox / scale - HEX_R * 2, viewMinY = -oy / scale - HEX_R * 2;
+          const viewMaxX = (w - ox) / scale + HEX_R * 2, viewMaxY = (h - oy) / scale + HEX_R * 2;
+          let count = 0;
+          for (let i = 0; i < HEX_COUNT; i++) {
+            const px = cellXY[i * 2], py = cellXY[i * 2 + 1];
+            if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
+            const children = getMicroChildren(i);
+            const sggF = cellSggFloat[i];
+            for (let k = 0; k < 7; k++) {
+              if (count >= MAX_MICRO) break;
+              const mc = children[k];
+              const m = getMicroMetrics(mc, state.hour, state.day);
+              microXYBufData[count * 2] = mc.x;
+              microXYBufData[count * 2 + 1] = mc.y;
+              microValBufData[count] = normalizeMetric(getMetricValue(m), domain);
+              microSggBufData[count] = sggF;
+              count++;
+            }
+            if (count >= MAX_MICRO) break;
+          }
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          if (count === 0) return;
+
+          gl.bindBuffer(gl.ARRAY_BUFFER, centerMicroBuf);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, microXYBufData.subarray(0, count * 2));
+          gl.bindBuffer(gl.ARRAY_BUFFER, valMicroBuf);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, microValBufData.subarray(0, count));
+          gl.bindBuffer(gl.ARRAY_BUFFER, sggMicroBuf);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, microSggBufData.subarray(0, count));
+
+          gl.useProgram(prog);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, rampTex);
+          gl.uniform1i(locs.uRamp, 0);
+          gl.uniform2f(locs.uViewport, w, h);
+          gl.uniform3f(locs.uCam, scale, ox, oy);
+          gl.uniform1f(locs.uRadius, MICRO_R * 1.015);
+          gl.uniform1f(locs.uInradius, MICRO_R * SQRT3 * 0.5 * 1.015);
+          gl.uniform1f(locs.uScale, scale);
+          gl.uniformMatrix2fv(locs.uRot, false, ROT_MICRO);
+          gl.uniform1f(locs.uFilterSgg, filterSgg);
+          gl.uniform1f(locs.uBorderAlpha, 0.16);
+          if (light) gl.uniform3f(locs.uBorderColor, 0.06, 0.09, 0.16);
+          else gl.uniform3f(locs.uBorderColor, 1.0, 1.0, 1.0);
+          gl.bindVertexArray(vaoMicro);
+          gl.drawArraysInstanced(gl.TRIANGLES, 0, 12, count);
+          gl.bindVertexArray(null);
+        },
+      };
+    }
+
+    const GL_ENGINE = createWebGLHexEngine(glCanvas);
+    const gl2dFallback = GL_ENGINE ? null : glCanvas.getContext("2d");
+
+    // -----------------------------------------------------------------------
+    // 6. Cached Metric Recompute & 3-Layer Dirty Renderer
+    // -----------------------------------------------------------------------
+    function isMicroActive() {
+      if (state.level !== "cell" || !state.layers.micro) return false;
+      const w = mapStage.clientWidth || 800, h = mapStage.clientHeight || 600;
+      return (state.cam.scale / (Math.min(w, h) / MAP_H)) >= 3.6;
+    }
+
+    // Cached pulse hotspots (world coords) — recomputed ONLY on time/level/filter change!
+    let pulseHotspots = [];
+
+    function recomputeFrameMetrics() {
+      const domain = getMetricDomain(false);
+      const dtH = getDeltaStepHours();
+      const arr = state.day === "wd" ? cellWd : cellWe;
+      const avgArr = state.day === "wd" ? cellAvgWd : cellAvgWe;
+      const metricMode = state.metric;
+
+      // Compute all 11,286 1km cell values + track top pulse movers in O(N)
+      const pulseCut = state.timeStepMin === 15 ? 3.5 : 14.0;
+      const rawPulse = [];
+
+      for (let i = 0; i < HEX_COUNT; i++) {
+        const off = i * 24;
+        const cur = evalCurve24(arr, off, state.hour);
+        const prev = evalCurve24(arr, off, state.hour - dtH);
+        const dAbs = cur - prev;
+        const dPct = prev > 0.0005 ? (dAbs / prev) * 100 : 0;
+        const val = metricMode === "deltaPct" ? dPct
+          : metricMode === "deltaAbs" ? dAbs
+            : metricMode === "vsAvg" ? (avgArr[i] > 0.0005 ? ((cur - avgArr[i]) / avgArr[i]) * 100 : 0)
+              : cur;
+        cellNormCache[i] = normalizeMetric(val, domain);
+        cellDeltaCache[i] = dPct;
+        cellVolCache[i] = cur;
+
+        if (state.level === "cell" && Math.abs(dPct) >= pulseCut && (state.filterSgg === -1 || cellSgg[i] === state.filterSgg)) {
+          rawPulse.push({ cx: cellXY[i * 2], cy: cellXY[i * 2 + 1], deltaPct: dPct, absPct: Math.abs(dPct) });
+        }
+      }
+
+      if (GL_ENGINE) GL_ENGINE.upload1kValues(cellNormCache);
+
+      if (state.level !== "cell") {
+        const items = state.level === "dong" ? DONGS : SGGS;
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (state.filterSgg !== -1 && (state.level === "dong" ? it.s !== state.filterSgg : it.id !== state.filterSgg)) continue;
+          const m = getRegionMetrics(it, state.hour, state.day);
+          if (Math.abs(m.deltaPct) >= pulseCut) {
+            rawPulse.push({ cx: it.cx, cy: it.cy, deltaPct: m.deltaPct, absPct: Math.abs(m.deltaPct) });
+          }
+        }
+      }
+
+      rawPulse.sort((a, b) => b.absPct - a.absPct);
+      // Keep top 90 spatially distributed candidates for ultra-fast FX pulse rendering
+      pulseHotspots = rawPulse.slice(0, 90);
+      state.dirtyMetrics = false;
+      state.dirtyGL = true;
+      state.dirtyVec = true;
+      state.dirtyFX = true;
+    }
+
+    function markTimeDirty() {
+      state.dirtyMetrics = true;
+      state.dirtyGL = true;
+      state.dirtyVec = true;
+      state.dirtyFX = true;
+    }
+
+    function markCameraDirty() {
+      state.dirtyGL = true;
+      state.dirtyVec = true;
+      state.dirtyFX = true;
+    }
+
+    // Text width cache (eliminates repeated ctx.measureText calls!)
+    const textWidthCache = new Map();
+    function measureCached(c, font, text) {
+      const k = font + "|" + text;
+      let w = textWidthCache.get(k);
+      if (w === undefined) {
+        c.font = font;
+        w = c.measureText(text).width;
+        if (textWidthCache.size > 4000) textWidthCache.clear();
+        textWidthCache.set(k, w);
+      }
+      return w;
+    }
+
+    // Fallback Canvas2D hex renderer (only runs if browser has no WebGL2)
+    function drawHexPath2D(c, cx, cy, verts) {
+      c.moveTo(cx + verts[0], cy + verts[1]);
+      c.lineTo(cx + verts[2], cy + verts[3]);
+      c.lineTo(cx + verts[4], cy + verts[5]);
+      c.lineTo(cx + verts[6], cy + verts[7]);
+      c.lineTo(cx + verts[8], cy + verts[9]);
+      c.lineTo(cx + verts[10], cy + verts[11]);
+      c.closePath();
+    }
+
+    function renderGLFallback2D(w, h, dpr, scale, ox, oy, zoomLevel, light, domain) {
+      const c = gl2dFallback;
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      c.clearRect(0, 0, w, h);
+      if (state.level !== "cell") return;
+
+      c.setTransform(scale * dpr, 0, 0, scale * dpr, ox * dpr, oy * dpr);
+      const stops = domain.diverging ? (light ? DIV_LIGHT : DIV_DARK) : (light ? SEQ_LIGHT : SEQ_DARK);
+      const B = 40;
+      const pal = new Array(B);
+      const buckets = new Array(B);
+      for (let b = 0; b < B; b++) { pal[b] = sampleStopsCss(stops, b / (B - 1)); buckets[b] = []; }
+
+      const viewMinX = -ox / scale - HEX_R * 2, viewMinY = -oy / scale - HEX_R * 2;
+      const viewMaxX = (w - ox) / scale + HEX_R * 2, viewMaxY = (h - oy) / scale + HEX_R * 2;
+      const microMode = isMicroActive();
+
+      if (microMode) {
+        for (let i = 0; i < HEX_COUNT; i++) {
+          const px = cellXY[i * 2], py = cellXY[i * 2 + 1];
+          if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
+          const ch = getMicroChildren(i);
+          for (let k = 0; k < 7; k++) {
+            const mc = ch[k];
+            const norm = normalizeMetric(getMetricValue(getMicroMetrics(mc, state.hour, state.day)), domain);
+            buckets[Math.min(B - 1, Math.floor(norm * B))].push(mc.x, mc.y);
+          }
+        }
+        for (let b = 0; b < B; b++) {
+          const arr = buckets[b];
+          if (!arr.length) continue;
+          c.beginPath();
+          for (let j = 0; j < arr.length; j += 2) drawHexPath2D(c, arr[j], arr[j + 1], MICRO_VERTS);
+          c.fillStyle = pal[b]; c.fill();
+        }
+      } else {
+        for (let i = 0; i < HEX_COUNT; i++) {
+          const px = cellXY[i * 2], py = cellXY[i * 2 + 1];
+          if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
+          buckets[Math.min(B - 1, Math.floor(cellNormCache[i] * B))].push(px, py);
+        }
+        for (let b = 0; b < B; b++) {
+          const arr = buckets[b];
+          if (!arr.length) continue;
+          c.beginPath();
+          for (let j = 0; j < arr.length; j += 2) drawHexPath2D(c, arr[j], arr[j + 1], HEX_VERTS);
+          c.fillStyle = pal[b]; c.fill();
+        }
+      }
+    }
+
+    function renderGLLayer() {
+      const w = mapStage.clientWidth, h = mapStage.clientHeight;
+      if (w === 0 || h === 0) return;
+      const light = isLightTheme();
+      const domain = getMetricDomain();
+      const { scale, ox, oy } = state.cam;
+      const zoomLevel = scale / (Math.min(w, h) / MAP_H);
+
+      if (GL_ENGINE) {
+        if (state.dirtyRamp) {
+          GL_ENGINE.uploadRamp(domain.diverging ? (light ? DIV_LIGHT : DIV_DARK) : (light ? SEQ_LIGHT : SEQ_DARK));
+          state.dirtyRamp = false;
+        }
+        if (state.level === "cell") {
+          if (isMicroActive()) GL_ENGINE.drawMicro(w, h, scale, ox, oy, state.filterSgg, light, domain);
+          else GL_ENGINE.draw1k(w, h, scale, ox, oy, state.filterSgg, zoomLevel, light);
+        } else {
+          GL_ENGINE.clear();
+        }
+      } else {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        renderGLFallback2D(w, h, dpr, scale, ox, oy, zoomLevel, light, domain);
+      }
+      state.dirtyGL = false;
+    }
+
+    function renderVectorLayer() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = mapStage.clientWidth, h = mapStage.clientHeight;
+      if (w === 0 || h === 0) return;
+
+      const light = isLightTheme();
+      const cs = getComputedStyle(document.documentElement);
+      const fgColor = cs.getPropertyValue("--foreground").trim() || (light ? "#111827" : "#e6edf3");
+      const { scale, ox, oy } = state.cam;
+      const zoomLevel = scale / (Math.min(w, h) / MAP_H);
+      const viewMinX = -ox / scale, viewMinY = -oy / scale;
+      const viewMaxX = (w - ox) / scale, viewMaxY = (h - oy) / scale;
+
+      vctx.save();
+      vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      vctx.clearRect(0, 0, w, h);
+
+      vctx.setTransform(scale * dpr, 0, 0, scale * dpr, ox * dpr, oy * dpr);
+
+      // 1) Seoul & Incheon Silhouettes
+      vctx.fillStyle = light ? "rgba(148, 163, 184, 0.16)" : "rgba(148, 163, 184, 0.08)";
+      vctx.strokeStyle = light ? "rgba(100, 116, 139, 0.34)" : "rgba(148, 163, 184, 0.22)";
+      vctx.lineWidth = 1.0 / scale;
+      vctx.setLineDash([4 / scale, 3 / scale]);
+      vctx.fill(SEOUL_PATH); vctx.stroke(SEOUL_PATH);
+      vctx.fill(INCHEON_PATH); vctx.stroke(INCHEON_PATH);
+      vctx.setLineDash([]);
+
+      // 2) Dong or SGG Choropleth (when not in WebGL cell mode)
+      if (state.level !== "cell") {
+        const domain = getMetricDomain();
+        const stops = domain.diverging ? (light ? DIV_LIGHT : DIV_DARK) : (light ? SEQ_LIGHT : SEQ_DARK);
+        const items = state.level === "dong" ? DONGS : SGGS;
+        const strokeBase = light ? "rgba(15, 23, 42, 0.20)" : "rgba(255, 255, 255, 0.14)";
+        vctx.lineWidth = (state.level === "dong" ? 0.55 : 1.1) / scale;
+        vctx.lineJoin = "round";
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const b = item.bbox;
+          if (b[2] < viewMinX || b[0] > viewMaxX || b[3] < viewMinY || b[1] > viewMaxY) continue;
+          const m = getRegionMetrics(item, state.hour, state.day);
+          const dimmed = state.filterSgg !== -1 && (state.level === "dong" ? item.s !== state.filterSgg : item.id !== state.filterSgg);
+          vctx.fillStyle = sampleStopsCss(stops, normalizeMetric(getMetricValue(m), domain));
+          vctx.globalAlpha = dimmed ? 0.22 : 1.0;
+          vctx.fill(item.path);
+          vctx.strokeStyle = strokeBase;
+          vctx.stroke(item.path);
+        }
+        vctx.globalAlpha = 1.0;
+      }
+
+      // 3) Pre-merged 602 행정동 borders (1 SINGLE draw call!)
+      if (state.level === "cell" && (state.layers.dongBorder || zoomLevel >= 2.8)) {
+        vctx.strokeStyle = light ? "rgba(15, 23, 42, 0.34)" : "rgba(226, 232, 240, 0.26)";
+        vctx.lineWidth = 0.85 / scale;
+        vctx.lineJoin = "round";
+        vctx.stroke(ALL_DONGS_PATH);
+      }
+
+      // 4) Pre-merged 47 시군구 borders (1 SINGLE draw call!)
+      if (state.level !== "sgg" && state.layers.sggBorder) {
+        vctx.strokeStyle = light ? "rgba(15, 23, 42, 0.48)" : "rgba(226, 232, 240, 0.36)";
+        vctx.lineWidth = 1.2 / scale;
+        vctx.lineJoin = "round";
+        vctx.stroke(ALL_SGGS_PATH);
+      }
+
+      // 5) Pre-merged Highways (2 draw calls instead of 12!)
+      if (state.layers.highway) {
+        vctx.lineCap = "round";
+        vctx.lineJoin = "round";
+        vctx.strokeStyle = light ? "rgba(255,255,255,0.62)" : "rgba(15,20,27,0.62)";
+        vctx.lineWidth = 3.0 / scale;
+        vctx.stroke(ALL_HIGHWAYS_PATH);
+        vctx.strokeStyle = light ? "rgba(217, 119, 6, 0.78)" : "rgba(251, 191, 36, 0.70)";
+        vctx.lineWidth = 1.4 / scale;
+        vctx.stroke(ALL_HIGHWAYS_PATH);
+      }
+
+      // 6) Hovered & Selected Outlines
+      function strokeTarget(tgt, isSel) {
+        if (!tgt) return;
+        if (tgt.kind === "dong" || tgt.kind === "sgg") {
+          const p = tgt.kind === "dong" ? DONGS[tgt.id].path : SGGS[tgt.id].path;
+          if (isSel) {
+            vctx.strokeStyle = light ? "#ffffff" : "#0f141b"; vctx.lineWidth = 4.2 / scale; vctx.stroke(p);
+            vctx.strokeStyle = light ? "#111827" : "#facc15"; vctx.lineWidth = 2.4 / scale; vctx.stroke(p);
+          } else {
+            vctx.strokeStyle = light ? "#0f172a" : "#f8fafc"; vctx.lineWidth = 2.0 / scale; vctx.stroke(p);
+          }
+          return;
+        }
+        vctx.beginPath();
+        if (tgt.kind === "cell") drawHexPath2D(vctx, cellXY[tgt.id * 2], cellXY[tgt.id * 2 + 1], HEX_VERTS);
+        else {
+          const ch = getMicroChildren(tgt.parentIdx)[tgt.subIdx];
+          drawHexPath2D(vctx, ch.x, ch.y, MICRO_VERTS);
+        }
+        if (isSel) {
+          vctx.strokeStyle = light ? "#ffffff" : "#0f141b"; vctx.lineWidth = 4.0 / scale; vctx.stroke();
+          vctx.strokeStyle = light ? "#111827" : "#facc15"; vctx.lineWidth = 2.2 / scale; vctx.stroke();
+        } else {
+          vctx.strokeStyle = light ? "#0f172a" : "#f8fafc"; vctx.lineWidth = 1.8 / scale; vctx.stroke();
+        }
+      }
+      strokeTarget(state.hovered, false);
+      strokeTarget(state.selected, true);
+
+      // --- Screen Space Labels (Zero measureText calls via width cache!) ---
+      vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const fontBase = "600 12px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
+      const fontLbl = "600 11.5px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
+      const fontPin = "600 11px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
+
+      vctx.font = fontBase;
+      vctx.textAlign = "center";
+      vctx.textBaseline = "middle";
+      vctx.fillStyle = light ? "rgba(71, 85, 105, 0.68)" : "rgba(148, 163, 184, 0.56)";
+      const [slx, sly] = worldToScreen(BUNDLE.meta.seoulLabel[0], BUNDLE.meta.seoulLabel[1]);
+      if (slx > 0 && slx < w && sly > 0 && sly < h) vctx.fillText("서울특별시", slx, sly);
+      const [ilx, ily] = worldToScreen(BUNDLE.meta.incheonLabel[0], BUNDLE.meta.incheonLabel[1]);
+      if (ilx > 0 && ilx < w && ily > 0 && ily < h) vctx.fillText("인천광역시", ilx, ily);
+
+      const placedBoxes = [];
+      function canPlace(x, y, bw, bh, force = false) {
+        if (!force && (x - bw / 2 < 8 || x + bw / 2 > w - 8 || y - bh / 2 < 48 || y + bh / 2 > h - 48)) return false;
+        if (!force) {
+          for (let i = 0; i < placedBoxes.length; i++) {
+            const p = placedBoxes[i];
+            if (Math.abs(x - p[0]) < (bw + p[2]) * 0.52 && Math.abs(y - p[1]) < (bh + p[3]) * 0.58) return false;
+          }
+        }
+        placedBoxes.push([x, y, bw, bh]);
+        return true;
+      }
+
+      if (state.layers.landmarks || (state.level === "cell" && zoomLevel >= 4.2)) {
+        const useAnc = state.level === "cell" && zoomLevel >= 4.2;
+        const len = useAnc ? ANCHORS.length : BUNDLE.landmarks.length;
+        vctx.font = fontPin;
+        for (let i = 0; i < len; i++) {
+          let name, lx, ly, tp;
+          if (useAnc) { const a = ANCHORS[i]; name = a[5]; lx = a[0]; ly = a[1]; tp = TYPE_KEYS[a[2]]; }
+          else { const lm = BUNDLE.landmarks[i]; name = lm.name; lx = lm.x; ly = lm.y; tp = lm.tp; }
+          const [sx, sy] = worldToScreen(lx, ly);
+          if (sx < 12 || sx > w - 12 || sy < 46 || sy > h - 46) continue;
+          const tw = measureCached(vctx, fontPin, name) + 10;
+          const by = sy - 13;
+          if (!canPlace(sx, by, tw + 4, 18)) continue;
+          const pinColor = tp === "biz" ? "#ea580c" : tp === "ind" ? "#0284c7" : tp === "tour" ? "#16a34a" : "#d97706";
+          vctx.beginPath(); vctx.arc(sx, sy, 3.6, 0, Math.PI * 2);
+          vctx.fillStyle = pinColor; vctx.fill();
+          vctx.strokeStyle = light ? "#ffffff" : "#0f141b"; vctx.lineWidth = 1.4; vctx.stroke();
+
+          vctx.fillStyle = light ? "rgba(255,255,255,0.92)" : "rgba(22,29,39,0.92)";
+          vctx.strokeStyle = pinColor; vctx.lineWidth = 1;
+          vctx.beginPath(); vctx.roundRect(sx - tw / 2, by - 8, tw, 16, 4); vctx.fill(); vctx.stroke();
+          vctx.fillStyle = fgColor; vctx.fillText(name, sx, by + 0.5);
+        }
+      }
+
+      vctx.font = fontLbl;
+      if (state.level !== "sgg" && zoomLevel >= 2.15) {
+        const visibleDongs = [];
+        for (let i = 0; i < DONGS.length; i++) {
+          const d = DONGS[i];
+          if (state.filterSgg !== -1 && d.s !== state.filterSgg) continue;
+          const [sx, sy] = worldToScreen(d.cx, d.cy);
+          if (sx < 0 || sx > w || sy < 0 || sy > h) continue;
+          const isSel = state.selected && state.selected.kind === "dong" && state.selected.id === d.id;
+          const m = state.level === "dong" ? getRegionMetrics(d, state.hour, state.day) : null;
+          visibleDongs.push({ d, sx, sy, m, isSel, score: isSel ? 1e9 : (m ? Math.abs(m.deltaPct) + m.cur : d.avgWd) });
+        }
+        visibleDongs.sort((a, b) => b.score - a.score);
+        for (let i = 0; i < visibleDongs.length; i++) {
+          const v = visibleDongs[i];
+          let label = v.d.nm;
+          if (v.m && (zoomLevel >= 3.2 || v.isSel)) {
+            const vs = state.metric === "volume" ? `${v.m.cur.toFixed(1)}G`
+              : state.metric === "deltaAbs" ? formatDeltaTraffic(v.m.deltaAbs)
+                : formatSigned(state.metric === "vsAvg" ? v.m.vsAvg : v.m.deltaPct, 0, "%");
+            label = `${v.d.nm} ${vs}`;
+          }
+          const tw = measureCached(vctx, fontLbl, label) + 8;
+          if (!canPlace(v.sx, v.sy, tw, 16, v.isSel)) continue;
+          vctx.lineWidth = v.isSel ? 3.8 : 3;
+          vctx.strokeStyle = light ? "rgba(255,255,255,0.92)" : "rgba(15,20,27,0.92)";
+          vctx.strokeText(label, v.sx, v.sy);
+          vctx.fillStyle = fgColor; vctx.fillText(label, v.sx, v.sy);
+        }
+      } else {
+        for (let i = 0; i < SGGS.length; i++) {
+          const s = SGGS[i];
+          if (state.filterSgg !== -1 && s.id !== state.filterSgg) continue;
+          const [sx, sy] = worldToScreen(s.cx, s.cy);
+          if (sx < 0 || sx > w || sy < 0 || sy > h) continue;
+          const tw = measureCached(vctx, fontLbl, s.shortName) + 6;
+          if (!canPlace(sx, sy, tw, 15)) continue;
+          vctx.lineWidth = 3;
+          vctx.strokeStyle = light ? "rgba(255,255,255,0.86)" : "rgba(15,20,27,0.86)";
+          vctx.strokeText(s.shortName, sx, sy);
+          vctx.fillStyle = fgColor; vctx.fillText(s.shortName, sx, sy);
+        }
+      }
+
+      vctx.restore();
+      state.dirtyVec = false;
+    }
+
+    // Layer 3: Ultra-lightweight dedicated Pulse FX Canvas (~0.08ms, NEVER touches GPU or Vector layers!)
+    function renderFXLayer() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = mapStage.clientWidth, h = mapStage.clientHeight;
+      if (w === 0 || h === 0) return;
+
+      fxctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fxctx.clearRect(0, 0, w, h);
+
+      if (!state.layers.pulse || pulseHotspots.length === 0) {
+        state.dirtyFX = false;
+        return;
+      }
+
+      const light = isLightTheme();
+      const cap = state.level === "sgg" ? 8 : 14;
+      const pulse = (Math.sin(state.pulsePhase) + 1) * 0.5;
+      const rRing = 5 + pulse * 9;
+      const ringAlpha = (0.72 * (1 - pulse)).toFixed(2);
+      const placed = [];
+
+      for (let i = 0; i < pulseHotspots.length && placed.length < cap; i++) {
+        const mv = pulseHotspots[i];
+        const [sx, sy] = worldToScreen(mv.cx, mv.cy);
+        if (sx < -20 || sx > w + 20 || sy < -20 || sy > h + 20) continue;
+        let close = false;
+        for (let j = 0; j < placed.length; j++) {
+          if (Math.hypot(sx - placed[j][0], sy - placed[j][1]) < 26) { close = true; break; }
+        }
+        if (close) continue;
+        placed.push([sx, sy]);
+
+        const rgb = mv.deltaPct >= 0 ? "239, 68, 68" : "37, 99, 235";
+        fxctx.beginPath();
+        fxctx.arc(sx, sy, rRing, 0, Math.PI * 2);
+        fxctx.strokeStyle = `rgba(${rgb}, ${ringAlpha})`;
+        fxctx.lineWidth = 1.6;
+        fxctx.stroke();
+
+        fxctx.beginPath();
+        fxctx.arc(sx, sy, 3.0, 0, Math.PI * 2);
+        fxctx.fillStyle = `rgb(${rgb})`;
+        fxctx.fill();
+        fxctx.strokeStyle = light ? "#ffffff" : "#0f141b";
+        fxctx.lineWidth = 1.2;
+        fxctx.stroke();
+      }
+      state.dirtyFX = false;
+    }
 
     function fitCameraToBBox(bbox, animate = false, padRatio = 0.07) {
-      const w = mapStage.clientWidth || 800;
-      const h = mapStage.clientHeight || 600;
-      const bw = Math.max(80, bbox[2] - bbox[0]);
-      const bh = Math.max(80, bbox[3] - bbox[1]);
-      const padX = w * padRatio, padY = h * padRatio;
-      const scale = Math.min((w - padX * 2) / bw, (h - padY * 2) / bh);
-      const cx = (bbox[0] + bbox[2]) * 0.5;
-      const cy = (bbox[1] + bbox[3]) * 0.5;
-      const target = {
-        scale: Math.max(0.03, Math.min(3.5, scale)),
-        ox: w * 0.5 - cx * scale,
-        oy: h * 0.5 - cy * scale,
-      };
+      const w = mapStage.clientWidth || 800, h = mapStage.clientHeight || 600;
+      const bw = Math.max(80, bbox[2] - bbox[0]), bh = Math.max(80, bbox[3] - bbox[1]);
+      const scale = Math.min((w * (1 - padRatio * 2)) / bw, (h * (1 - padRatio * 2)) / bh);
+      const cx = (bbox[0] + bbox[2]) * 0.5, cy = (bbox[1] + bbox[3]) * 0.5;
+      const clamped = Math.max(0.03, Math.min(3.5, scale));
+      const target = { scale: clamped, ox: w * 0.5 - cx * clamped, oy: h * 0.5 - cy * clamped };
       if (animate) state.camTarget = target;
-      else { state.cam = target; state.camTarget = null; }
+      else { state.cam = target; state.camTarget = null; markCameraDirty(); }
     }
 
-    function resetCamera(animate = true) {
-      fitCameraToBBox([0, 0, MAP_W, MAP_H], animate, 0.06);
-    }
-
-    function screenToWorld(sx, sy) {
-      return [(sx - state.cam.ox) / state.cam.scale, (sy - state.cam.oy) / state.cam.scale];
-    }
-
-    function worldToScreen(wx, wy) {
-      return [wx * state.cam.scale + state.cam.ox, wy * state.cam.scale + state.cam.oy];
-    }
+    function resetCamera(animate = true) { fitCameraToBBox([0, 0, MAP_W, MAP_H], animate, 0.06); }
+    function screenToWorld(sx, sy) { return [(sx - state.cam.ox) / state.cam.scale, (sy - state.cam.oy) / state.cam.scale]; }
+    function worldToScreen(wx, wy) { return [wx * state.cam.scale + state.cam.ox, wy * state.cam.scale + state.cam.oy]; }
 
     let lastMicroState = false;
     function updateScaleBar() {
-      const targetPx = 68;
       const kmPerPx = KM_PER_UNIT / state.cam.scale;
-      const rawKm = targetPx * kmPerPx;
+      const rawKm = 68 * kmPerPx;
       const steps = [0.2, 0.5, 1, 2, 5, 10, 20, 30, 50];
       let best = steps[0];
       for (const s of steps) if (Math.abs(s - rawKm) < Math.abs(best - rawKm)) best = s;
@@ -1211,12 +1819,13 @@
 
       const microNow = isMicroActive();
       const badge = document.getElementById("resBadge");
+      const engineTag = GL_ENGINE ? "WebGL2" : "2D";
       if (state.level === "cell") {
         if (microNow) {
-          badge.textContent = "385 m 초미세 셀 · 79K 해상도";
+          badge.textContent = `${engineTag} · 385 m 초미세 · 79K`;
           badge.style.borderColor = "var(--primary)";
         } else {
-          badge.textContent = `1.0 km 셀 · ${HEX_COUNT.toLocaleString()}개`;
+          badge.textContent = `${engineTag} · 1.0 km 셀 · ${HEX_COUNT.toLocaleString()}개`;
           badge.style.borderColor = "";
         }
       } else if (state.level === "dong") {
@@ -1255,8 +1864,7 @@
 
       const ticksEl = document.getElementById("legendTicks");
       if (domain.diverging) {
-        const m = domain.max;
-        const half = m / 2;
+        const m = domain.max, half = m / 2;
         const fmt = (v) => (Math.abs(v) < 1 && v !== 0 ? v.toFixed(2) : Math.abs(v) < 10 && !Number.isInteger(v) ? v.toFixed(1) : String(Math.round(v)));
         const u = domain.unit === "%" ? "%" : "";
         ticksEl.innerHTML = `<span>-${fmt(m)}${u}</span><span>-${fmt(half)}${u}</span><span>0</span><span>+${fmt(half)}${u}</span><span>+${fmt(m)}${u}+</span>`;
@@ -1265,427 +1873,24 @@
         const fmt = (v) => (m < 10 ? v.toFixed(1) : String(Math.round(v)));
         ticksEl.innerHTML = `<span>0</span><span>${fmt(m * 0.25)}</span><span>${fmt(m * 0.5)}</span><span>${fmt(m * 0.75)}</span><span>${fmt(m)}+G</span>`;
       }
+      state.dirtyRamp = true;
+      state.dirtyGL = true;
     }
 
-    function resizeCanvas() {
+    function resizeCanvases() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = mapStage.clientWidth, h = mapStage.clientHeight;
       if (w === 0 || h === 0) return;
-      mapCanvas.width = Math.round(w * dpr);
-      mapCanvas.height = Math.round(h * dpr);
+      const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+      for (const cv of [glCanvas, vectorCanvas, fxCanvas]) {
+        if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+      }
       updateScaleBar();
-      renderMap();
-    }
-
-    function drawHexAt(cx, cy, verts) {
-      ctx.moveTo(cx + verts[0], cy + verts[1]);
-      ctx.lineTo(cx + verts[2], cy + verts[3]);
-      ctx.lineTo(cx + verts[4], cy + verts[5]);
-      ctx.lineTo(cx + verts[6], cy + verts[7]);
-      ctx.lineTo(cx + verts[8], cy + verts[9]);
-      ctx.lineTo(cx + verts[10], cy + verts[11]);
-      ctx.closePath();
-    }
-
-    function renderMap() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = mapStage.clientWidth, h = mapStage.clientHeight;
-      if (w === 0 || h === 0) return;
-
-      const light = isLightTheme();
-      const cs = getComputedStyle(document.documentElement);
-      const bgColor = cs.getPropertyValue("--background").trim() || (light ? "#f4f6f9" : "#0f141b");
-      const fgColor = cs.getPropertyValue("--foreground").trim() || (light ? "#111827" : "#e6edf3");
-
-      ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, w, h);
-
-      const { scale, ox, oy } = state.cam;
-      const viewMinX = -ox / scale - HEX_R * 2;
-      const viewMinY = -oy / scale - HEX_R * 2;
-      const viewMaxX = (w - ox) / scale + HEX_R * 2;
-      const viewMaxY = (h - oy) / scale + HEX_R * 2;
-
-      ctx.setTransform(scale * dpr, 0, 0, scale * dpr, ox * dpr, oy * dpr);
-
-      // 1) Seoul & Incheon Silhouettes
-      ctx.fillStyle = light ? "rgba(148, 163, 184, 0.16)" : "rgba(148, 163, 184, 0.08)";
-      ctx.strokeStyle = light ? "rgba(100, 116, 139, 0.34)" : "rgba(148, 163, 184, 0.22)";
-      ctx.lineWidth = 1.0 / scale;
-      ctx.setLineDash([4 / scale, 3 / scale]);
-      ctx.fill(SEOUL_PATH); ctx.stroke(SEOUL_PATH);
-      ctx.fill(INCHEON_PATH); ctx.stroke(INCHEON_PATH);
-      ctx.setLineDash([]);
-
-      const domain = getMetricDomain();
-      const zoomLevel = scale / (Math.min(w, h) / MAP_H);
-      const topMovers = [];
-      const pulseThreshold = state.timeStepMin === 15 ? 4.8 : 14.0;
-
-      // 2) Render Active Spatial Layer
-      if (state.level === "cell") {
-        const pal = getBucketPalette(domain, light);
-        const microMode = isMicroActive();
-        const buckets = new Array(BUCKET_N);
-        const dimBuckets = state.filterSgg !== -1 ? new Array(BUCKET_N) : null;
-        for (let b = 0; b < BUCKET_N; b++) {
-          buckets[b] = [];
-          if (dimBuckets) dimBuckets[b] = [];
-        }
-
-        if (microMode) {
-          // Render H3 Aperture-7 385m micro-cells for visible parent 1km hexes!
-          for (let i = 0; i < HEX_COUNT; i++) {
-            const px = cellX[i], py = cellY[i];
-            if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
-            const dimmed = state.filterSgg !== -1 && cellSgg[i] !== state.filterSgg;
-            const children = getMicroChildren(i);
-            for (let k = 0; k < 7; k++) {
-              const mc = children[k];
-              const m = getMicroMetrics(mc, state.hour, state.day);
-              const bi = bucketIndex(getMetricValue(m), domain);
-              (dimmed ? dimBuckets[bi] : buckets[bi]).push(mc.x, mc.y);
-              if (!dimmed && Math.abs(m.deltaPct) >= pulseThreshold) {
-                topMovers.push({ cx: mc.x, cy: mc.y, deltaPct: m.deltaPct, absPct: Math.abs(m.deltaPct) });
-              }
-            }
-          }
-          // Batched fill (40 calls max!)
-          for (let b = 0; b < BUCKET_N; b++) {
-            const arr = buckets[b];
-            if (arr.length) {
-              ctx.beginPath();
-              for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], MICRO_VERTS);
-              ctx.fillStyle = pal[b];
-              ctx.fill();
-            }
-          }
-          if (dimBuckets) {
-            ctx.globalAlpha = 0.22;
-            for (let b = 0; b < BUCKET_N; b++) {
-              const arr = dimBuckets[b];
-              if (arr.length) {
-                ctx.beginPath();
-                for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], MICRO_VERTS);
-                ctx.fillStyle = pal[b];
-                ctx.fill();
-              }
-            }
-            ctx.globalAlpha = 1.0;
-          }
-          // Crisp micro-hex grid lines
-          ctx.beginPath();
-          for (let b = 0; b < BUCKET_N; b++) {
-            const arr = buckets[b];
-            for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], MICRO_VERTS);
-          }
-          ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.14)" : "rgba(255, 255, 255, 0.10)";
-          ctx.lineWidth = 0.5 / scale;
-          ctx.stroke();
-        } else {
-          // Render 11,286 1km hex cells via 40-bucket batching (< 2ms!)
-          for (let i = 0; i < HEX_COUNT; i++) {
-            const px = cellX[i], py = cellY[i];
-            if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
-            const m = getCellMetrics(i, state.hour, state.day);
-            const bi = bucketIndex(getMetricValue(m), domain);
-            const dimmed = state.filterSgg !== -1 && cellSgg[i] !== state.filterSgg;
-            (dimmed ? dimBuckets[bi] : buckets[bi]).push(px, py);
-            if (!dimmed && Math.abs(m.deltaPct) >= pulseThreshold) {
-              topMovers.push({ cx: px, cy: py, deltaPct: m.deltaPct, absPct: Math.abs(m.deltaPct) });
-            }
-          }
-          for (let b = 0; b < BUCKET_N; b++) {
-            const arr = buckets[b];
-            if (arr.length) {
-              ctx.beginPath();
-              for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], HEX_VERTS);
-              ctx.fillStyle = pal[b];
-              ctx.fill();
-            }
-          }
-          if (dimBuckets) {
-            ctx.globalAlpha = 0.22;
-            for (let b = 0; b < BUCKET_N; b++) {
-              const arr = dimBuckets[b];
-              if (arr.length) {
-                ctx.beginPath();
-                for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], HEX_VERTS);
-                ctx.fillStyle = pal[b];
-                ctx.fill();
-              }
-            }
-            ctx.globalAlpha = 1.0;
-          }
-          // Subtle hex cell borders when zoomed in enough
-          if (zoomLevel >= 1.55) {
-            ctx.beginPath();
-            for (let b = 0; b < BUCKET_N; b++) {
-              const arr = buckets[b];
-              for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], HEX_VERTS);
-            }
-            ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.14)" : "rgba(255, 255, 255, 0.10)";
-            ctx.lineWidth = 0.45 / scale;
-            ctx.stroke();
-          }
-        }
-      } else {
-        // Classic 602 행정동 or 47 시군구 Choropleth
-        const items = state.level === "dong" ? DONGS : SGGS;
-        const strokeBase = light ? "rgba(15, 23, 42, 0.20)" : "rgba(255, 255, 255, 0.14)";
-        ctx.lineWidth = (state.level === "dong" ? 0.55 : 1.1) / scale;
-        ctx.lineJoin = "round";
-
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          const b = item.bbox;
-          if (b[2] < viewMinX || b[0] > viewMaxX || b[3] < viewMinY || b[1] > viewMaxY) continue;
-          const m = getRegionMetrics(item, state.hour, state.day);
-          const dimmed = state.filterSgg !== -1 && (state.level === "dong" ? item.s !== state.filterSgg : item.id !== state.filterSgg);
-          ctx.fillStyle = colorForValue(getMetricValue(m), domain, light);
-          ctx.globalAlpha = dimmed ? 0.22 : 1.0;
-          ctx.fill(item.path);
-          ctx.strokeStyle = strokeBase;
-          ctx.stroke(item.path);
-          if (!dimmed && Math.abs(m.deltaPct) >= pulseThreshold) {
-            topMovers.push({ cx: item.cx, cy: item.cy, deltaPct: m.deltaPct, absPct: Math.abs(m.deltaPct) });
-          }
-        }
-        ctx.globalAlpha = 1.0;
-      }
-
-      // 3) Optional 602 행정동 Boundaries Overlay (when in cell mode)
-      if (state.level === "cell" && (state.layers.dongBorder || zoomLevel >= 2.8)) {
-        ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.34)" : "rgba(226, 232, 240, 0.26)";
-        ctx.lineWidth = 0.85 / scale;
-        for (const d of DONGS) {
-          const b = d.bbox;
-          if (b[2] < viewMinX || b[0] > viewMaxX || b[3] < viewMinY || b[1] > viewMaxY) continue;
-          ctx.stroke(d.path);
-        }
-      }
-
-      // 4) 47 SGG Boundary Emphasis
-      if (state.level !== "sgg" && state.layers.sggBorder) {
-        ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.48)" : "rgba(226, 232, 240, 0.36)";
-        ctx.lineWidth = 1.2 / scale;
-        for (const s of SGGS) {
-          const b = s.bbox;
-          if (b[2] < viewMinX || b[0] > viewMaxX || b[3] < viewMinY || b[1] > viewMaxY) continue;
-          ctx.stroke(s.path);
-        }
-      }
-
-      // 5) Major Highways Overlay
-      if (state.layers.highway) {
-        ctx.save();
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = light ? "rgba(255,255,255,0.62)" : "rgba(15,20,27,0.62)";
-        ctx.lineWidth = 3.0 / scale;
-        for (const hw of BUNDLE.highways) {
-          ctx.beginPath();
-          for (let i = 0; i < hw.pts.length; i += 2) {
-            if (i === 0) ctx.moveTo(hw.pts[i], hw.pts[i + 1]); else ctx.lineTo(hw.pts[i], hw.pts[i + 1]);
-          }
-          ctx.stroke();
-        }
-        ctx.strokeStyle = light ? "rgba(217, 119, 6, 0.78)" : "rgba(251, 191, 36, 0.70)";
-        ctx.lineWidth = 1.4 / scale;
-        for (const hw of BUNDLE.highways) {
-          ctx.beginPath();
-          for (let i = 0; i < hw.pts.length; i += 2) {
-            if (i === 0) ctx.moveTo(hw.pts[i], hw.pts[i + 1]); else ctx.lineTo(hw.pts[i], hw.pts[i + 1]);
-          }
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-
-      // 6) Hovered & Selected Outlines
-      function strokeTarget(tgt, isSel) {
-        if (!tgt) return;
-        ctx.beginPath();
-        if (tgt.kind === "cell") {
-          drawHexAt(cellX[tgt.id], cellY[tgt.id], HEX_VERTS);
-        } else if (tgt.kind === "micro") {
-          const ch = getMicroChildren(tgt.parentIdx)[tgt.subIdx];
-          drawHexAt(ch.x, ch.y, MICRO_VERTS);
-        } else if (tgt.kind === "dong") {
-          if (isSel) {
-            ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
-            ctx.lineWidth = 4.2 / scale; ctx.stroke(DONGS[tgt.id].path);
-            ctx.strokeStyle = light ? "#111827" : "#facc15";
-            ctx.lineWidth = 2.4 / scale; ctx.stroke(DONGS[tgt.id].path);
-          } else {
-            ctx.strokeStyle = light ? "#0f172a" : "#f8fafc";
-            ctx.lineWidth = 2.0 / scale; ctx.stroke(DONGS[tgt.id].path);
-          }
-          return;
-        } else if (tgt.kind === "sgg") {
-          if (isSel) {
-            ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
-            ctx.lineWidth = 4.2 / scale; ctx.stroke(SGGS[tgt.id].path);
-            ctx.strokeStyle = light ? "#111827" : "#facc15";
-            ctx.lineWidth = 2.4 / scale; ctx.stroke(SGGS[tgt.id].path);
-          } else {
-            ctx.strokeStyle = light ? "#0f172a" : "#f8fafc";
-            ctx.lineWidth = 2.0 / scale; ctx.stroke(SGGS[tgt.id].path);
-          }
-          return;
-        }
-        if (isSel) {
-          ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
-          ctx.lineWidth = 4.0 / scale; ctx.stroke();
-          ctx.strokeStyle = light ? "#111827" : "#facc15";
-          ctx.lineWidth = 2.2 / scale; ctx.stroke();
-        } else {
-          ctx.strokeStyle = light ? "#0f172a" : "#f8fafc";
-          ctx.lineWidth = 1.8 / scale; ctx.stroke();
-        }
-      }
-      strokeTarget(state.hovered, false);
-      strokeTarget(state.selected, true);
-
-      // --- Screen Space: Context Labels, Pulses, Landmarks, Zoom-Adaptive Region Labels ---
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      ctx.font = "600 12px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = light ? "rgba(71, 85, 105, 0.68)" : "rgba(148, 163, 184, 0.56)";
-      const [slx, sly] = worldToScreen(BUNDLE.meta.seoulLabel[0], BUNDLE.meta.seoulLabel[1]);
-      if (slx > 0 && slx < w && sly > 0 && sly < h) ctx.fillText("서울특별시", slx, sly);
-      const [ilx, ily] = worldToScreen(BUNDLE.meta.incheonLabel[0], BUNDLE.meta.incheonLabel[1]);
-      if (ilx > 0 && ilx < w && ily > 0 && ily < h) ctx.fillText("인천광역시", ilx, ily);
-
-      // 7) Surge / Drop Animated Pulse Rings (Spatially de-clustered so clusters don't stack)
-      if (state.layers.pulse && topMovers.length > 0) {
-        topMovers.sort((a, b) => b.absPct - a.absPct);
-        const cap = state.level === "sgg" ? 8 : 14;
-        const pulse = (Math.sin(state.pulsePhase) + 1) * 0.5;
-        const placedPulses = [];
-        for (let i = 0; i < topMovers.length && placedPulses.length < cap; i++) {
-          const mv = topMovers[i];
-          const [sx, sy] = worldToScreen(mv.cx, mv.cy);
-          if (sx < -20 || sx > w + 20 || sy < -20 || sy > h + 20) continue;
-          let tooClose = false;
-          for (const pp of placedPulses) {
-            if (Math.hypot(sx - pp[0], sy - pp[1]) < 26) { tooClose = true; break; }
-          }
-          if (tooClose) continue;
-          placedPulses.push([sx, sy]);
-
-          const isSurge = mv.deltaPct >= 0;
-          const rgb = isSurge ? "239, 68, 68" : "37, 99, 235";
-          const rRing = 5 + pulse * 9;
-          ctx.beginPath();
-          ctx.arc(sx, sy, rRing, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${rgb}, ${(0.72 * (1 - pulse)).toFixed(2)})`;
-          ctx.lineWidth = 1.6;
-          ctx.stroke();
-
-          ctx.beginPath();
-          ctx.arc(sx, sy, 3.0, 0, Math.PI * 2);
-          ctx.fillStyle = `rgb(${rgb})`;
-          ctx.fill();
-          ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-        }
-      }
-
-      // 8) Collision-Avoided Landmark Pins & Zoom-Adaptive Labels
-      const placedBoxes = [];
-      function canPlace(x, y, bw, bh, force = false) {
-        if (!force && (x - bw / 2 < 8 || x + bw / 2 > w - 8 || y - bh / 2 < 48 || y + bh / 2 > h - 48)) return false;
-        if (!force) {
-          for (const p of placedBoxes) {
-            if (Math.abs(x - p[0]) < (bw + p[2]) * 0.52 && Math.abs(y - p[1]) < (bh + p[3]) * 0.58) return false;
-          }
-        }
-        placedBoxes.push([x, y, bw, bh]);
-        return true;
-      }
-
-      // 8a) Landmarks (or show close-up sub-anchors automatically when zoomed into 385m micro-cell mode!)
-      if (state.layers.landmarks || (state.level === "cell" && zoomLevel >= 4.2)) {
-        const list = (state.level === "cell" && zoomLevel >= 4.2)
-          ? ANCHORS.map((a) => ({ name: a[5], x: a[0], y: a[1], tp: TYPE_KEYS[a[2]] }))
-          : BUNDLE.landmarks;
-        ctx.font = "600 11px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
-        for (const lm of list) {
-          const [sx, sy] = worldToScreen(lm.x, lm.y);
-          if (sx < 12 || sx > w - 12 || sy < 46 || sy > h - 46) continue;
-          const pinColor = lm.tp === "biz" ? "#ea580c" : lm.tp === "ind" ? "#0284c7" : lm.tp === "tour" ? "#16a34a" : "#d97706";
-          const tw = ctx.measureText(lm.name).width + 10;
-          const by = sy - 13;
-          if (!canPlace(sx, by, tw + 4, 18)) continue;
-          ctx.beginPath();
-          ctx.arc(sx, sy, 3.6, 0, Math.PI * 2);
-          ctx.fillStyle = pinColor; ctx.fill();
-          ctx.strokeStyle = light ? "#ffffff" : "#0f141b"; ctx.lineWidth = 1.4; ctx.stroke();
-
-          ctx.fillStyle = light ? "rgba(255,255,255,0.92)" : "rgba(22,29,39,0.92)";
-          ctx.strokeStyle = pinColor; ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.roundRect(sx - tw / 2, by - 8, tw, 16, 4); ctx.fill(); ctx.stroke();
-          ctx.fillStyle = fgColor;
-          ctx.fillText(lm.name, sx, by + 0.5);
-        }
-      }
-
-      // 8b) Region Labels
-      if (state.level !== "sgg" && zoomLevel >= 2.15) {
-        ctx.font = "600 11.5px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
-        const visibleDongs = [];
-        for (const d of DONGS) {
-          if (state.filterSgg !== -1 && d.s !== state.filterSgg) continue;
-          const [sx, sy] = worldToScreen(d.cx, d.cy);
-          if (sx < 0 || sx > w || sy < 0 || sy > h) continue;
-          const m = getRegionMetrics(d, state.hour, state.day);
-          const isSel = state.selected && state.selected.kind === "dong" && state.selected.id === d.id;
-          visibleDongs.push({ d, sx, sy, m, isSel, score: isSel ? 1e9 : (Math.abs(m.deltaPct) + m.cur) });
-        }
-        visibleDongs.sort((a, b) => b.score - a.score);
-        for (const v of visibleDongs) {
-          const valStr = state.metric === "volume"
-            ? `${v.m.cur.toFixed(1)}G`
-            : state.metric === "deltaAbs"
-              ? formatDeltaTraffic(v.m.deltaAbs)
-              : formatSigned(state.metric === "vsAvg" ? v.m.vsAvg : v.m.deltaPct, 0, "%");
-          const label = (zoomLevel >= 3.2 || v.isSel) && state.level === "dong" ? `${v.d.nm} ${valStr}` : v.d.nm;
-          const tw = ctx.measureText(label).width + 8;
-          if (!canPlace(v.sx, v.sy, tw, 16, v.isSel)) continue;
-          ctx.lineWidth = v.isSel ? 3.8 : 3;
-          ctx.strokeStyle = light ? "rgba(255,255,255,0.92)" : "rgba(15,20,27,0.92)";
-          ctx.strokeText(label, v.sx, v.sy);
-          ctx.fillStyle = fgColor;
-          ctx.fillText(label, v.sx, v.sy);
-        }
-      } else {
-        ctx.font = "600 11.5px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
-        for (const s of SGGS) {
-          if (state.filterSgg !== -1 && s.id !== state.filterSgg) continue;
-          const [sx, sy] = worldToScreen(s.cx, s.cy);
-          if (sx < 0 || sx > w || sy < 0 || sy > h) continue;
-          const shortName = s.name.replace(/시(?=[가-힣]+구$)/, " ").replace(/구$/, "").replace(/[시군]$/, "");
-          const tw = ctx.measureText(shortName).width + 6;
-          if (!canPlace(sx, sy, tw, 15)) continue;
-          ctx.lineWidth = 3;
-          ctx.strokeStyle = light ? "rgba(255,255,255,0.86)" : "rgba(15,20,27,0.86)";
-          ctx.strokeText(shortName, sx, sy);
-          ctx.fillStyle = fgColor;
-          ctx.fillText(shortName, sx, sy);
-        }
-      }
-
-      ctx.restore();
+      markCameraDirty();
     }
 
     // -----------------------------------------------------------------------
-    // 6. O(1) Mathematical Hex Hit Testing + Polygon Hit Testing
+    // 7. O(1) Hex Hit Testing + Tooltip
     // -----------------------------------------------------------------------
     function hitTestHex1km(wx, wy) {
       const approxRow = Math.round(wy / HEX_DY);
@@ -1698,7 +1903,7 @@
           if (c < 0) continue;
           const cid = cellByKey.get((r << 10) | c);
           if (cid === undefined) continue;
-          const dx = wx - cellX[cid], dy = wy - cellY[cid];
+          const dx = wx - cellXY[cid * 2], dy = wy - cellXY[cid * 2 + 1];
           const d2 = dx * dx + dy * dy;
           if (d2 < bestD2) { bestD2 = d2; bestId = cid; }
         }
@@ -1710,7 +1915,6 @@
       const [wx, wy] = screenToWorld(sx, sy);
       if (state.level === "cell") {
         if (isMicroActive()) {
-          // Check nearby 1km parents' 7 micro-children for exact hit
           const approxRow = Math.round(wy / HEX_DY);
           let best = null, bestD2 = MICRO_R * MICRO_R * 1.08;
           for (let r = approxRow - 1; r <= approxRow + 1; r++) {
@@ -1729,17 +1933,15 @@
             }
           }
           return best;
-        } else {
-          const cid = hitTestHex1km(wx, wy);
-          return cid !== -1 ? { kind: "cell", id: cid } : null;
         }
+        const cid = hitTestHex1km(wx, wy);
+        return cid !== -1 ? { kind: "cell", id: cid } : null;
       }
       const items = state.level === "dong" ? DONGS : SGGS;
       for (let i = items.length - 1; i >= 0; i--) {
-        const it = items[i];
-        const b = it.bbox;
+        const it = items[i], b = it.bbox;
         if (wx < b[0] || wx > b[2] || wy < b[1] || wy > b[3]) continue;
-        if (ctx.isPointInPath(it.path, wx, wy)) return { kind: state.level, id: i };
+        if (vctx.isPointInPath(it.path, wx, wy)) return { kind: state.level, id: i };
       }
       return null;
     }
@@ -1757,75 +1959,39 @@
         const d = DONGS[mc.did];
         const [lon, lat] = worldToLonLat(mc.x, mc.y);
         return {
-          title: `${d.nm} · 초미세셀 #${tgt.parentIdx}-${tgt.subIdx + 1}`,
-          sgg: `경기도 ${d.sggName}`,
-          code: `385m H3 · ${lat.toFixed(4)}°N ${lon.toFixed(4)}°E`,
-          typeLabel: mc.typeLabel,
-          anc: mc.anc,
-          km2: 0.13,
-          g5: mc.g5,
-          mix: mc.mix,
-          parentDongId: mc.did,
+          title: `${d.nm} · 초미세셀 #${tgt.parentIdx}-${tgt.subIdx + 1}`, sgg: `경기도 ${d.sggName}`,
+          code: `385m H3 · ${lat.toFixed(4)}°N ${lon.toFixed(4)}°E`, typeLabel: mc.typeLabel,
+          anc: mc.anc, km2: 0.13, g5: mc.g5, mix: mc.mix, parentDongId: mc.did,
           m: getMicroMetrics(mc, state.hour, state.day),
-          arrPrimary: mc[state.day],
-          arrAlt: mc[state.day === "wd" ? "we" : "wd"],
-          offset: 0,
+          arrPrimary: mc[state.day], arrAlt: mc[state.day === "wd" ? "we" : "wd"], offset: 0,
         };
       }
       if (tgt.kind === "cell") {
-        const cid = tgt.id;
-        const d = DONGS[cellDong[cid]];
-        const [lon, lat] = worldToLonLat(cellX[cid], cellY[cid]);
-        const tp = TYPE_KEYS[cellTpIdx[cid]];
+        const cid = tgt.id, d = DONGS[cellDong[cid]];
+        const [lon, lat] = worldToLonLat(cellXY[cid * 2], cellXY[cid * 2 + 1]);
         return {
-          title: `${d.nm} · 1km셀 #${cid + 1}`,
-          sgg: `경기도 ${d.sggName}`,
-          code: `1.0km 셀 · ${lat.toFixed(3)}°N ${lon.toFixed(3)}°E`,
-          typeLabel: TYPE_LABELS[tp],
-          anc: cellAncName[cid],
-          km2: 0.90,
-          g5: cellG5[cid],
-          mix: cellMix[cid],
-          parentDongId: cellDong[cid],
+          title: `${d.nm} · 1km셀 #${cid + 1}`, sgg: `경기도 ${d.sggName}`,
+          code: `1.0km 셀 · ${lat.toFixed(3)}°N ${lon.toFixed(3)}°E`, typeLabel: TYPE_LABELS[TYPE_KEYS[cellTpIdx[cid]]],
+          anc: cellAncName[cid], km2: 0.90, g5: cellG5[cid], mix: cellMix[cid], parentDongId: cellDong[cid],
           m: getCellMetrics(cid, state.hour, state.day),
-          arrPrimary: state.day === "wd" ? cellWd : cellWe,
-          arrAlt: state.day === "wd" ? cellWe : cellWd,
-          offset: cid * 24,
+          arrPrimary: state.day === "wd" ? cellWd : cellWe, arrAlt: state.day === "wd" ? cellWe : cellWd, offset: cid * 24,
         };
       }
       if (tgt.kind === "dong") {
         const d = DONGS[tgt.id];
         return {
-          title: d.nm,
-          sgg: `경기도 ${d.sggName}`,
-          code: `행정동 ${d.cd}`,
-          typeLabel: d.typeLabel,
-          anc: d.anc,
-          km2: d.km2,
-          g5: d.g5,
-          mix: d.mix,
-          parentDongId: -1,
+          title: d.nm, sgg: `경기도 ${d.sggName}`, code: `행정동 ${d.cd}`, typeLabel: d.typeLabel,
+          anc: d.anc, km2: d.km2, g5: d.g5, mix: d.mix, parentDongId: -1,
           m: getRegionMetrics(d, state.hour, state.day),
-          arrPrimary: d[state.day],
-          arrAlt: d[state.day === "wd" ? "we" : "wd"],
-          offset: 0,
+          arrPrimary: d[state.day], arrAlt: d[state.day === "wd" ? "we" : "wd"], offset: 0,
         };
       }
       const s = SGGS[tgt.id];
       return {
-        title: s.name,
-        sgg: `경기도 · 관할 ${s.dongs.length}개 행정동`,
-        code: `시군구 ${s.cd}`,
-        typeLabel: s.typeLabel,
-        anc: "",
-        km2: s.km2,
-        g5: s.g5,
-        mix: s.mix,
-        parentDongId: -1,
+        title: s.name, sgg: `경기도 · 관할 ${s.dongs.length}개 행정동`, code: `시군구 ${s.cd}`, typeLabel: s.typeLabel,
+        anc: "", km2: s.km2, g5: s.g5, mix: s.mix, parentDongId: -1,
         m: getRegionMetrics(s, state.hour, state.day),
-        arrPrimary: s[state.day],
-        arrAlt: s[state.day === "wd" ? "we" : "wd"],
-        offset: 0,
+        arrPrimary: s[state.day], arrAlt: s[state.day === "wd" ? "we" : "wd"], offset: 0,
       };
     }
 
@@ -1851,30 +2017,26 @@
       deltaEl.className = "text-sm font-semibold tabular-nums " + deltaColorClass(info.m.deltaPct);
       document.getElementById("ttVsAvg").textContent = `일평균 대비 ${formatSigned(info.m.vsAvg, 1, "%")}`;
 
-      // Mini 24h sparkline (96-point smooth)
       const sctx = ttSpark.getContext("2d");
       const sw = ttSpark.width, sh = ttSpark.height;
       sctx.clearRect(0, 0, sw, sh);
       let maxV = 0.01;
-      for (let h = 0; h < 24; h++) {
-        const v = info.arrPrimary[info.offset + h];
-        if (v > maxV) maxV = v;
-      }
+      for (let h = 0; h < 24; h++) { const v = info.arrPrimary[info.offset + h]; if (v > maxV) maxV = v; }
       const cs = getComputedStyle(document.documentElement);
       const pri = cs.getPropertyValue("--primary").trim() || "#2563eb";
       const mut = cs.getPropertyValue("--muted-foreground").trim() || "#94a3b8";
 
       sctx.beginPath();
-      for (let s = 0; s < 96; s++) {
-        const hf = s * 0.25;
+      for (let s = 0; s < 48; s++) {
+        const hf = s * 0.5;
         const v = evalCurve24(info.arrPrimary, info.offset, hf);
-        const px = (hf / 23.75) * (sw - 8) + 4;
+        const px = (hf / 23.5) * (sw - 8) + 4;
         const py = sh - 4 - (v / maxV) * (sh - 10);
         if (s === 0) sctx.moveTo(px, py); else sctx.lineTo(px, py);
       }
       sctx.strokeStyle = pri; sctx.lineWidth = 1.7; sctx.stroke();
 
-      const hx = ((state.hour % 24) / 23.75) * (sw - 8) + 4;
+      const hx = ((state.hour % 24) / 23.5) * (sw - 8) + 4;
       const hy = sh - 4 - (info.m.cur / maxV) * (sh - 10);
       sctx.beginPath(); sctx.moveTo(hx, 2); sctx.lineTo(hx, sh - 2);
       sctx.strokeStyle = mut; sctx.lineWidth = 1; sctx.setLineDash([2, 2]); sctx.stroke(); sctx.setLineDash([]);
@@ -1883,18 +2045,19 @@
       sctx.fill();
 
       tooltipEl.classList.remove("hidden");
-      const tw = 276, th = 180;
       let tx = clientX + 16, ty = clientY + 14;
-      if (tx + tw > window.innerWidth - 10) tx = clientX - tw - 16;
-      if (ty + th > window.innerHeight - 10) ty = clientY - th - 14;
+      if (tx + 276 > window.innerWidth - 10) tx = clientX - 292;
+      if (ty + 180 > window.innerHeight - 10) ty = clientY - 194;
       tooltipEl.style.left = Math.max(8, tx) + "px";
       tooltipEl.style.top = Math.max(8, ty) + "px";
     }
 
     // -----------------------------------------------------------------------
-    // 7. Sidebar Updates (KPI, Rankings, Archetype Bars, Detail Inspector)
+    // 8. O(N) Top-K Sidebar Updates (Zero 11,286-Element Sort!)
     // -----------------------------------------------------------------------
     function updateSidebar() {
+      if (state.dirtyMetrics) recomputeFrameMetrics();
+
       const hrInt = Math.floor(state.hour) % 24;
       const clockStr = formatClock(state.hour);
       const dayLabel = state.day === "wd" ? "평일" : "주말";
@@ -1908,11 +2071,9 @@
       document.getElementById("rankHeading").textContent =
         state.level === "cell" ? "시간대별 변화 TOP 1km 셀" : state.level === "dong" ? "시간대별 변화 TOP 행정동" : "시간대별 변화 TOP 시·군·구";
 
-      // Province KPI
       const pArr = PROVINCE_TOTAL[state.day];
-      const dtH = getDeltaStepHours();
       const pCur = evalCurve24(pArr, 0, state.hour);
-      const pPrev = evalCurve24(pArr, 0, state.hour - dtH);
+      const pPrev = evalCurve24(pArr, 0, state.hour - getDeltaStepHours());
       const pDeltaPct = pPrev > 0 ? ((pCur - pPrev) / pPrev) * 100 : 0;
 
       document.getElementById("kpiTotal").textContent = `${(pCur / 1000).toFixed(2)} Tbps`;
@@ -1922,41 +2083,54 @@
 
       const surgeCut = state.timeStepMin === 15 ? 3.5 : 10.0;
       let surgeCnt = 0, dropCnt = 0;
-      const archAgg = {};
+      const archSum = new Float64Array(7), archCnt = new Int32Array(7);
 
       if (state.level === "cell") {
-        // Compute KPI surge/drop & archetype breakdown across 11,286 cells (fast loop)
-        const topCandidates = [];
+        // O(N) top-K scan (zero 11,286-element sort!) reading directly from cached typed arrays!
+        const K = 40;
+        const bestIds = new Int32Array(K).fill(-1);
+        const bestScores = new Float32Array(K).fill(-1e9);
+        let minTop = -1e9, minTopPos = 0;
+        const mode = state.rankTab;
+
         for (let i = 0; i < HEX_COUNT; i++) {
-          const m = getCellMetrics(i, state.hour, state.day);
-          if (m.deltaPct >= surgeCut) surgeCnt++;
-          else if (m.deltaPct <= -surgeCut) dropCnt++;
-          const tp = TYPE_KEYS[cellTpIdx[i]];
-          if (!archAgg[tp]) archAgg[tp] = { sum: 0, cnt: 0 };
-          archAgg[tp].sum += m.deltaPct;
-          archAgg[tp].cnt += 1;
+          const dp = cellDeltaCache[i];
+          if (dp >= surgeCut) surgeCnt++;
+          else if (dp <= -surgeCut) dropCnt++;
+          const tp = cellTpIdx[i];
+          archSum[tp] += dp; archCnt[tp]++;
 
           if (state.filterSgg !== -1 && cellSgg[i] !== state.filterSgg) continue;
-          const score = state.rankTab === "surge" ? m.deltaPct : state.rankTab === "drop" ? -m.deltaPct : m.cur;
-          topCandidates.push({ id: i, score, m });
+          const sc = mode === "surge" ? dp : mode === "drop" ? -dp : cellVolCache[i];
+          if (sc > minTop) {
+            bestIds[minTopPos] = i;
+            bestScores[minTopPos] = sc;
+            // Find new minimum in tiny 40-element buffer
+            minTop = bestScores[0]; minTopPos = 0;
+            for (let j = 1; j < K; j++) {
+              if (bestScores[j] < minTop) { minTop = bestScores[j]; minTopPos = j; }
+            }
+          }
         }
-        topCandidates.sort((a, b) => b.score - a.score);
-        // Deduplicate by dong so top 8 highlights diverse hotspots rather than 8 adjacent cells of one dong
-        const top = [];
-        const seenDong = new Map();
-        for (const c of topCandidates) {
+
+        const cands = [];
+        for (let j = 0; j < K; j++) if (bestIds[j] !== -1) cands.push({ id: bestIds[j], sc: bestScores[j] });
+        cands.sort((a, b) => b.sc - a.sc);
+
+        const top = [], seenDong = new Set();
+        for (const c of cands) {
           const did = cellDong[c.id];
-          const cnt = seenDong.get(did) || 0;
-          if (cnt >= 1 && state.filterSgg === -1) continue;
-          seenDong.set(did, cnt + 1);
-          top.push(c);
+          if (state.filterSgg === -1 && seenDong.has(did)) continue;
+          seenDong.add(did);
+          top.push(c.id);
           if (top.length >= 8) break;
         }
-        renderRankRows(top.map((r) => {
-          const d = DONGS[cellDong[r.id]];
+        renderRankRows(top.map((cid) => {
+          const d = DONGS[cellDong[cid]];
+          const m = getCellMetrics(cid, state.hour, state.day);
           return {
-            kind: "cell", id: r.id, m: r.m,
-            main: cellAncName[r.id] ? `${d.nm} (${cellAncName[r.id].split("·")[0]})` : `${d.nm} #${r.id + 1}`,
+            kind: "cell", id: cid, m,
+            main: cellAncName[cid] ? `${d.nm} (${cellAncName[cid].split("·")[0]})` : `${d.nm} #${cid + 1}`,
             sub: d.sggName,
           };
         }));
@@ -1965,9 +2139,8 @@
           const m = getRegionMetrics(d, state.hour, state.day);
           if (m.deltaPct >= surgeCut) surgeCnt++;
           else if (m.deltaPct <= -surgeCut) dropCnt++;
-          if (!archAgg[d.tp]) archAgg[d.tp] = { sum: 0, cnt: 0 };
-          archAgg[d.tp].sum += m.deltaPct;
-          archAgg[d.tp].cnt += 1;
+          const ti = TYPE_KEYS.indexOf(d.tp);
+          if (ti >= 0) { archSum[ti] += m.deltaPct; archCnt[ti]++; }
         }
         const items = state.level === "dong" ? DONGS : SGGS;
         const scored = [];
@@ -1975,10 +2148,10 @@
           const it = items[i];
           if (state.filterSgg !== -1 && (state.level === "dong" ? it.s !== state.filterSgg : it.id !== state.filterSgg)) continue;
           const m = getRegionMetrics(it, state.hour, state.day);
-          const score = state.rankTab === "surge" ? m.deltaPct : state.rankTab === "drop" ? -m.deltaPct : m.cur;
-          scored.push({ id: i, item: it, score, m });
+          const sc = state.rankTab === "surge" ? m.deltaPct : state.rankTab === "drop" ? -m.deltaPct : m.cur;
+          scored.push({ id: i, item: it, sc, m });
         }
-        scored.sort((a, b) => b.score - a.score);
+        scored.sort((a, b) => b.sc - a.sc);
         renderRankRows(scored.slice(0, 8).map((r) => ({
           kind: state.level, id: r.id, m: r.m,
           main: state.level === "dong" ? r.item.nm : r.item.name,
@@ -1989,21 +2162,18 @@
       document.getElementById("kpiSurgeDrop").innerHTML =
         `<span class="text-[#ea580c]">▲${surgeCnt.toLocaleString()}</span> <span class="text-[var(--muted-foreground)]">/</span> <span class="text-[#2563eb]">▼${dropCnt.toLocaleString()}</span>`;
 
-      // Archetype breakdown bars
-      const barScale = state.timeStepMin === 15 ? 3.2 : 1.15;
-      document.getElementById("archetypeBars").innerHTML = TYPE_KEYS.map((tp) => {
-        const stat = archAgg[tp];
-        if (!stat) return "";
-        const avgPct = stat.sum / stat.cnt;
+      const barScale = state.timeStepMin === 15 ? 4.5 : 1.15;
+      document.getElementById("archetypeBars").innerHTML = TYPE_KEYS.map((tp, idx) => {
+        if (!archCnt[idx]) return "";
+        const avgPct = archSum[idx] / archCnt[idx];
         const wPct = Math.min(50, Math.abs(avgPct) * barScale);
         const isPos = avgPct >= 0;
-        const col = isPos ? "#ea580c" : "#2563eb";
         return `
           <div class="flex items-center gap-2 text-xs">
             <span class="w-20 shrink-0 text-[var(--muted-foreground)] truncate">${TYPE_LABELS[tp]}</span>
             <div class="flex-1 h-2 bg-[var(--background)] rounded-full relative overflow-hidden border border-[var(--card-border)]">
               <div class="absolute top-0 bottom-0 left-1/2 w-px bg-[var(--border)]"></div>
-              <div class="absolute top-0 bottom-0 rounded-full" style="${isPos ? `left:50%;width:${wPct}%` : `right:50%;width:${wPct}%`};background:${col};"></div>
+              <div class="absolute top-0 bottom-0 rounded-full" style="${isPos ? `left:50%;width:${wPct}%` : `right:50%;width:${wPct}%`};background:${isPos ? "#ea580c" : "#2563eb"};"></div>
             </div>
             <span class="w-12 text-right font-mono tabular-nums font-semibold ${deltaColorClass(avgPct)}">${formatSigned(avgPct, 1, "%")}</span>
           </div>`;
@@ -2017,9 +2187,7 @@
         ? Math.max(...rows.map((x) => x.m.cur), 0.1)
         : Math.max(...rows.map((x) => Math.abs(x.m.deltaPct)), 3);
       document.getElementById("rankList").innerHTML = rows.map((row, rIdx) => {
-        const pct = state.rankTab === "vol"
-          ? Math.min(100, (row.m.cur / maxBar) * 100)
-          : Math.min(100, (Math.abs(row.m.deltaPct) / maxBar) * 100);
+        const pct = state.rankTab === "vol" ? Math.min(100, (row.m.cur / maxBar) * 100) : Math.min(100, (Math.abs(row.m.deltaPct) / maxBar) * 100);
         const barColor = state.rankTab === "vol" ? "var(--primary)" : (row.m.deltaPct >= 0 ? "#ea580c" : "#2563eb");
         const valText = state.rankTab === "vol" ? formatTraffic(row.m.cur) : formatSigned(row.m.deltaPct, 1, "%");
         const subText = state.rankTab === "vol" ? formatSigned(row.m.deltaPct, 1, "%") : formatDeltaTraffic(row.m.deltaAbs);
@@ -2046,10 +2214,10 @@
 
     function selectTarget(tgt, flyTo = true) {
       state.selected = tgt;
+      state.dirtyVec = true;
       if (!tgt) {
         document.getElementById("detailPanel").classList.add("hidden");
         document.getElementById("overviewPanel").classList.remove("hidden");
-        renderMap();
         return;
       }
       document.getElementById("overviewPanel").classList.add("hidden");
@@ -2058,24 +2226,19 @@
 
       if (flyTo) {
         if (tgt.kind === "cell") {
-          const cx = cellX[tgt.id], cy = cellY[tgt.id];
-          // Fly close enough to trigger 385m micro-cell detail!
-          const span = 320;
-          fitCameraToBBox([cx - span, cy - span, cx + span, cy + span], true, 0.14);
+          const cx = cellXY[tgt.id * 2], cy = cellXY[tgt.id * 2 + 1];
+          fitCameraToBBox([cx - 320, cy - 320, cx + 320, cy + 320], true, 0.14);
         } else if (tgt.kind === "micro") {
           const ch = getMicroChildren(tgt.parentIdx)[tgt.subIdx];
-          const span = 220;
-          fitCameraToBBox([ch.x - span, ch.y - span, ch.x + span, ch.y + span], true, 0.14);
+          fitCameraToBBox([ch.x - 220, ch.y - 220, ch.x + 220, ch.y + 220], true, 0.14);
         } else {
           const item = tgt.kind === "dong" ? DONGS[tgt.id] : SGGS[tgt.id];
-          const b = item.bbox;
-          const cx = (b[0] + b[2]) * 0.5, cy = (b[1] + b[3]) * 0.5;
+          const b = item.bbox, cx = (b[0] + b[2]) * 0.5, cy = (b[1] + b[3]) * 0.5;
           const span = Math.max(b[2] - b[0], b[3] - b[1], tgt.kind === "dong" ? 420 : 1200);
           fitCameraToBBox([cx - span * 0.85, cy - span * 0.85, cx + span * 0.85, cy + span * 0.85], true, 0.14);
         }
       }
       updateDetailInspector();
-      renderMap();
     }
 
     function updateDetailInspector() {
@@ -2084,8 +2247,7 @@
 
       let peakH = 0, peakV = -1;
       for (let s = 0; s < 96; s++) {
-        const hf = s * 0.25;
-        const v = evalCurve24(info.arrPrimary, info.offset, hf);
+        const hf = s * 0.25, v = evalCurve24(info.arrPrimary, info.offset, hf);
         if (v > peakV) { peakV = v; peakH = hf; }
       }
 
@@ -2093,7 +2255,6 @@
       document.getElementById("detSgg").textContent = info.sgg;
       document.getElementById("detTitle").textContent = info.title;
       document.getElementById("detType").textContent = info.typeLabel;
-
       const metaParts = [`면적 약 ${info.km2} km²`];
       if (info.anc) metaParts.push(`핵심 거점: ${info.anc}`);
       document.getElementById("detMeta").textContent = metaParts.join(" · ");
@@ -2101,12 +2262,11 @@
       const pAct = document.getElementById("detParentAction");
       if (info.parentDongId !== -1) {
         const pd = DONGS[info.parentDongId];
-        document.getElementById("jumpParentDongBtn").textContent = `소속 행정동 보기: ${pd.sggName} ${pd.nm}`;
-        document.getElementById("jumpParentDongBtn").dataset.dongId = String(pd.id);
+        const btn = document.getElementById("jumpParentDongBtn");
+        btn.textContent = `소속 행정동 보기: ${pd.sggName} ${pd.nm}`;
+        btn.dataset.dongId = String(pd.id);
         pAct.classList.remove("hidden");
-      } else {
-        pAct.classList.add("hidden");
-      }
+      } else pAct.classList.add("hidden");
 
       document.getElementById("detVol").textContent = formatTraffic(info.m.cur);
       document.getElementById("detDeltaLbl").textContent = state.timeStepMin === 15 ? "15분 전 대비 변화" : "1시간 전 대비 변화";
@@ -2121,7 +2281,6 @@
       document.getElementById("detCurvePrimary").textContent = state.day === "wd" ? "평일" : "주말";
       document.getElementById("detCurveAlt").textContent = state.day === "wd" ? "주말 비교" : "평일 비교";
       document.getElementById("detBarUnit").textContent = state.timeStepMin === 15 ? "막대: 15분 Δ" : "막대: 1시간 Δ";
-
       drawDetailChart(info.arrPrimary, info.arrAlt, info.offset);
 
       document.getElementById("det5gLabel").textContent = `5G ${info.g5}% · LTE ${100 - info.g5}%`;
@@ -2139,32 +2298,26 @@
           <span class="w-8 text-right font-mono tabular-nums">${info.mix[i]}%</span>
         </div>`).join("");
 
-      // Sibling / Nearby comparison
       const sibTitle = document.getElementById("detSiblingTitle");
       const sibList = document.getElementById("detSiblingList");
       let rows = [];
       if (state.selected.kind === "micro") {
-        const pid = state.selected.parentIdx;
-        const d = DONGS[cellDong[pid]];
+        const pid = state.selected.parentIdx, d = DONGS[cellDong[pid]];
         sibTitle.textContent = `${d.nm} 동일 1km 내 7개 초미세 셀 (385m)`;
-        const ch = getMicroChildren(pid);
-        rows = ch.map((mc) => ({
+        rows = getMicroChildren(pid).map((mc) => ({
           kind: "micro", id: mc.id, parentIdx: pid, subIdx: mc.subIdx,
           nm: `초미세셀 #${pid}-${mc.subIdx + 1}${mc.subIdx === 0 ? " (중심)" : ""}`,
-          m: getMicroMetrics(mc, state.hour, state.day),
-          active: mc.subIdx === state.selected.subIdx,
+          m: getMicroMetrics(mc, state.hour, state.day), active: mc.subIdx === state.selected.subIdx,
         }));
       } else if (state.selected.kind === "cell") {
-        const did = cellDong[state.selected.id];
-        const d = DONGS[did];
+        const did = cellDong[state.selected.id], d = DONGS[did];
         sibTitle.textContent = `${d.nm} 내부 1km 셀 비교`;
         for (let i = 0; i < HEX_COUNT; i++) {
           if (cellDong[i] === did) {
             rows.push({
               kind: "cell", id: i,
               nm: cellAncName[i] ? `셀 #${i + 1} (${cellAncName[i].split("·")[0]})` : `1km셀 #${i + 1}`,
-              m: getCellMetrics(i, state.hour, state.day),
-              active: i === state.selected.id,
+              m: getCellMetrics(i, state.hour, state.day), active: i === state.selected.id,
             });
           }
         }
@@ -2174,17 +2327,13 @@
         const d = DONGS[state.selected.id];
         sibTitle.textContent = `${d.sggName} 내 변화량 상위 행정동`;
         rows = DONGS.filter((x) => x.s === d.s).map((x) => ({
-          kind: "dong", id: x.id, nm: x.nm,
-          m: getRegionMetrics(x, state.hour, state.day),
-          active: x.id === d.id,
+          kind: "dong", id: x.id, nm: x.nm, m: getRegionMetrics(x, state.hour, state.day), active: x.id === d.id,
         })).sort((a, b) => Math.abs(b.m.deltaPct) - Math.abs(a.m.deltaPct)).slice(0, 6);
       } else {
         const s = SGGS[state.selected.id];
         sibTitle.textContent = `${s.name} 관할 행정동`;
         rows = s.dongs.map((x) => ({
-          kind: "dong", id: x.id, nm: x.nm,
-          m: getRegionMetrics(x, state.hour, state.day),
-          active: false,
+          kind: "dong", id: x.id, nm: x.nm, m: getRegionMetrics(x, state.hour, state.day), active: false,
         })).sort((a, b) => Math.abs(b.m.deltaPct) - Math.abs(a.m.deltaPct)).slice(0, 6);
       }
 
@@ -2202,8 +2351,7 @@
       const canvas = document.getElementById("detailChart");
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const cw = canvas.clientWidth || 310, ch = canvas.clientHeight || 156;
-      canvas.width = Math.round(cw * dpr);
-      canvas.height = Math.round(ch * dpr);
+      canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
 
       const c = canvas.getContext("2d");
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2216,14 +2364,10 @@
 
       const padL = 34, padR = 10, padT = 12, padB = 22;
       const plotW = cw - padL - padR, plotH = ch - padT - padB;
-      const lineH = plotH * 0.68;
-      const barTop = padT + lineH + 6, barH = plotH - lineH - 6;
+      const lineH = plotH * 0.68, barTop = padT + lineH + 6, barH = plotH - lineH - 6;
 
-      const N = state.timeStepMin === 15 ? 96 : 24;
-      const stepH = state.timeStepMin === 15 ? 0.25 : 1.0;
-      const vals = new Float32Array(N);
-      const alts = new Float32Array(N);
-      const deltas = new Float32Array(N);
+      const N = state.timeStepMin === 15 ? 96 : 24, stepH = state.timeStepMin === 15 ? 0.25 : 1.0;
+      const vals = new Float32Array(N), alts = new Float32Array(N), deltas = new Float32Array(N);
       let maxV = 0.05, maxD = 0.005;
       for (let i = 0; i < N; i++) {
         const hf = i * stepH;
@@ -2251,21 +2395,15 @@
       c.globalAlpha = 1;
 
       const xForH = (hf) => padL + (hf / 23.75) * plotW;
-
-      // Delta bars
       const barZero = barTop + barH * 0.5;
-      c.strokeStyle = brd;
-      c.beginPath(); c.moveTo(padL, barZero); c.lineTo(cw - padR, barZero); c.stroke();
+      c.strokeStyle = brd; c.beginPath(); c.moveTo(padL, barZero); c.lineTo(cw - padR, barZero); c.stroke();
       const bw = Math.max(1.5, (plotW / N) * 0.72);
       for (let i = 0; i < N; i++) {
-        const x = xForH(i * stepH) - bw / 2;
-        const bh = (deltas[i] / maxD) * (barH * 0.48);
+        const x = xForH(i * stepH) - bw / 2, bh = (deltas[i] / maxD) * (barH * 0.48);
         c.fillStyle = deltas[i] >= 0 ? "rgba(234, 88, 12, 0.78)" : "rgba(37, 99, 235, 0.78)";
-        if (bh >= 0) c.fillRect(x, barZero - bh, bw, bh);
-        else c.fillRect(x, barZero, bw, -bh);
+        if (bh >= 0) c.fillRect(x, barZero - bh, bw, bh); else c.fillRect(x, barZero, bw, -bh);
       }
 
-      // Comparison dashed curve
       c.beginPath();
       for (let i = 0; i < N; i++) {
         const x = xForH(i * stepH), y = padT + lineH * (1 - alts[i] / maxV);
@@ -2274,7 +2412,6 @@
       c.strokeStyle = mut; c.globalAlpha = 0.65; c.lineWidth = 1.25; c.setLineDash([3, 3]); c.stroke();
       c.setLineDash([]); c.globalAlpha = 1;
 
-      // Primary curve
       c.beginPath();
       for (let i = 0; i < N; i++) {
         const x = xForH(i * stepH), y = padT + lineH * (1 - vals[i] / maxV);
@@ -2282,12 +2419,9 @@
       }
       c.strokeStyle = pri; c.lineWidth = 2; c.stroke();
 
-      // Current cursor
-      const hx = xForH(state.hour % 24);
-      const curV = evalCurve24(arrPri, offset, state.hour);
+      const hx = xForH(state.hour % 24), curV = evalCurve24(arrPri, offset, state.hour);
       const hy = padT + lineH * (1 - curV / maxV);
-      c.beginPath(); c.moveTo(hx, padT); c.lineTo(hx, ch - padB);
-      c.strokeStyle = "#ea580c"; c.lineWidth = 1.3; c.stroke();
+      c.beginPath(); c.moveTo(hx, padT); c.lineTo(hx, ch - padB); c.strokeStyle = "#ea580c"; c.lineWidth = 1.3; c.stroke();
       c.beginPath(); c.arc(hx, hy, 4, 0, Math.PI * 2); c.fillStyle = "#ea580c"; c.fill();
 
       c.fillStyle = mut; c.textAlign = "center"; c.textBaseline = "top";
@@ -2295,38 +2429,26 @@
     }
 
     // -----------------------------------------------------------------------
-    // 8. Bottom Province Waveform & Animation Loop
+    // 9. Bottom Waveform & Zero-Waste Master Animation Loop
     // -----------------------------------------------------------------------
     const waveCanvas = document.getElementById("timelineWave");
     function drawTimelineWave() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const cw = waveCanvas.clientWidth || 400, ch = waveCanvas.clientHeight || 28;
-      waveCanvas.width = Math.round(cw * dpr);
-      waveCanvas.height = Math.round(ch * dpr);
-
+      waveCanvas.width = Math.round(cw * dpr); waveCanvas.height = Math.round(ch * dpr);
       const c = waveCanvas.getContext("2d");
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, cw, ch);
 
       const arr = PROVINCE_TOTAL[state.day];
-      const N = state.timeStepMin === 15 ? 96 : 24;
-      const stepH = state.timeStepMin === 15 ? 0.25 : 1.0;
-      const vals = new Float32Array(N);
-      const deltas = new Float32Array(N);
+      const N = state.timeStepMin === 15 ? 96 : 24, stepH = state.timeStepMin === 15 ? 0.25 : 1.0;
+      const vals = new Float32Array(N), deltas = new Float32Array(N);
       let maxV = 1, maxD = 1;
-      for (let i = 0; i < N; i++) {
-        vals[i] = evalCurve24(arr, 0, i * stepH);
-        if (vals[i] > maxV) maxV = vals[i];
-      }
-      for (let i = 0; i < N; i++) {
-        deltas[i] = vals[i] - vals[(i + N - 1) % N];
-        if (Math.abs(deltas[i]) > maxD) maxD = Math.abs(deltas[i]);
-      }
+      for (let i = 0; i < N; i++) { vals[i] = evalCurve24(arr, 0, i * stepH); if (vals[i] > maxV) maxV = vals[i]; }
+      for (let i = 0; i < N; i++) { deltas[i] = vals[i] - vals[(i + N - 1) % N]; if (Math.abs(deltas[i]) > maxD) maxD = Math.abs(deltas[i]); }
 
-      const padX = 8, plotW = cw - padX * 2;
-      const xForH = (hf) => padX + (hf / 23.75) * plotW;
-      const midY = ch * 0.56;
-      const bw = Math.max(2, (plotW / N) * 0.62);
+      const padX = 8, plotW = cw - padX * 2, xForH = (hf) => padX + (hf / 23.75) * plotW;
+      const midY = ch * 0.56, bw = Math.max(2, (plotW / N) * 0.62);
       for (let i = 0; i < N; i++) {
         const bh = (deltas[i] / maxD) * (ch * 0.40);
         c.fillStyle = deltas[i] >= 0 ? "rgba(234, 88, 12, 0.36)" : "rgba(37, 99, 235, 0.36)";
@@ -2343,57 +2465,67 @@
       c.strokeStyle = pri; c.lineWidth = 1.6; c.stroke();
 
       const hx = xForH(state.hour % 24);
-      c.beginPath(); c.moveTo(hx, 0); c.lineTo(hx, ch);
-      c.strokeStyle = "#ea580c"; c.lineWidth = 2; c.stroke();
+      c.beginPath(); c.moveTo(hx, 0); c.lineTo(hx, ch); c.strokeStyle = "#ea580c"; c.lineWidth = 2; c.stroke();
     }
 
-    let lastTs = 0, uiThrottle = 0;
+    let lastTs = 0, uiThrottle = 0, fxThrottle = 0;
     function tick(ts) {
-      const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.016;
-      lastTs = ts;
-      let needsRedraw = false;
+      if (!document.hidden) {
+        const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.016;
+        lastTs = ts;
 
-      if (state.playing) {
-        const rate = state.timeStepMin === 15 ? 0.85 : 1.45;
-        state.hour = (state.hour + dt * rate * state.speed) % 24;
-        syncSliderFromHour();
-        uiThrottle += dt;
-        if (uiThrottle >= 0.08) {
-          uiThrottle = 0;
-          updateSidebar();
-          drawTimelineWave();
+        if (state.playing) {
+          const rate = state.timeStepMin === 15 ? 0.85 : 1.45;
+          state.hour = (state.hour + dt * rate * state.speed) % 24;
+          syncSliderFromHour();
+          markTimeDirty();
+          uiThrottle += dt;
+          if (uiThrottle >= 0.16) {
+            uiThrottle = 0;
+            updateSidebar();
+            drawTimelineWave();
+          }
         }
-        needsRedraw = true;
-      }
 
-      if (state.camTarget) {
-        const lerp = 1 - Math.pow(0.001, dt);
-        state.cam.scale += (state.camTarget.scale - state.cam.scale) * lerp;
-        state.cam.ox += (state.camTarget.ox - state.cam.ox) * lerp;
-        state.cam.oy += (state.camTarget.oy - state.cam.oy) * lerp;
-        if (
-          Math.abs(state.cam.scale - state.camTarget.scale) < 1e-4 &&
-          Math.abs(state.cam.ox - state.camTarget.ox) < 0.5 &&
-          Math.abs(state.cam.oy - state.camTarget.oy) < 0.5
-        ) {
-          state.cam = state.camTarget;
-          state.camTarget = null;
+        if (state.camTarget) {
+          const lerp = 1 - Math.pow(0.001, dt);
+          state.cam.scale += (state.camTarget.scale - state.cam.scale) * lerp;
+          state.cam.ox += (state.camTarget.ox - state.cam.ox) * lerp;
+          state.cam.oy += (state.camTarget.oy - state.cam.oy) * lerp;
+          if (
+            Math.abs(state.cam.scale - state.camTarget.scale) < 1e-4 &&
+            Math.abs(state.cam.ox - state.camTarget.ox) < 0.5 &&
+            Math.abs(state.cam.oy - state.camTarget.oy) < 0.5
+          ) {
+            state.cam = state.camTarget;
+            state.camTarget = null;
+          }
+          updateScaleBar();
+          markCameraDirty();
         }
-        updateScaleBar();
-        needsRedraw = true;
-      }
 
-      if (state.layers.pulse) {
-        state.pulsePhase += dt * 3.0;
-        needsRedraw = true;
-      }
+        // Dedicated 30fps pulse FX throttle — NEVER touches GPU or Vector layers!
+        if (state.layers.pulse) {
+          fxThrottle += dt;
+          if (fxThrottle >= 0.033) {
+            state.pulsePhase += fxThrottle * 3.0;
+            fxThrottle = 0;
+            state.dirtyFX = true;
+          }
+        }
 
-      if (needsRedraw) renderMap();
+        if (state.dirtyMetrics) recomputeFrameMetrics();
+        if (state.dirtyGL) renderGLLayer();
+        if (state.dirtyVec) renderVectorLayer();
+        if (state.dirtyFX) renderFXLayer();
+      } else {
+        lastTs = ts;
+      }
       requestAnimationFrame(tick);
     }
 
     // -----------------------------------------------------------------------
-    // 9. Interactions (Multi-Touch Pinch-Zoom, Search, Filters, Timeline, CSV)
+    // 10. Interactions (Multi-Touch Pinch-Zoom, Search, Filters, Timeline, CSV)
     // -----------------------------------------------------------------------
     const activePointers = new Map();
     let isDragging = false, dragMoved = false;
@@ -2409,10 +2541,10 @@
       };
     }
 
-    mapCanvas.addEventListener("pointerdown", (e) => {
+    fxCanvas.addEventListener("pointerdown", (e) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      mapCanvas.setPointerCapture(e.pointerId);
-      const rect = mapCanvas.getBoundingClientRect();
+      fxCanvas.setPointerCapture(e.pointerId);
+      const rect = fxCanvas.getBoundingClientRect();
       activePointers.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top, cx: e.clientX, cy: e.clientY });
       state.camTarget = null;
 
@@ -2430,8 +2562,8 @@
       }
     });
 
-    mapCanvas.addEventListener("pointermove", (e) => {
-      const rect = mapCanvas.getBoundingClientRect();
+    fxCanvas.addEventListener("pointermove", (e) => {
+      const rect = fxCanvas.getBoundingClientRect();
       const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
       if (activePointers.has(e.pointerId)) {
         activePointers.set(e.pointerId, { x: sx, y: sy, cx: e.clientX, cy: e.clientY });
@@ -2444,7 +2576,7 @@
         state.cam.ox = p.midX - (pinchStartMidX - pinchStartOx) * ratio;
         state.cam.oy = p.midY - (pinchStartMidY - pinchStartOy) * ratio;
         updateScaleBar();
-        renderMap();
+        markCameraDirty();
         return;
       }
       if (isDragging && activePointers.size === 1) {
@@ -2454,7 +2586,7 @@
           state.cam.ox = camStartOx + dx;
           state.cam.oy = camStartOy + dy;
           tooltipEl.classList.add("hidden");
-          renderMap();
+          markCameraDirty();
           return;
         }
       }
@@ -2462,7 +2594,7 @@
       const hit = hitTest(sx, sy);
       if (!sameTarget(hit, state.hovered)) {
         state.hovered = hit;
-        renderMap();
+        state.dirtyVec = true;
       }
       updateTooltip(hit, e.clientX, e.clientY);
     });
@@ -2481,28 +2613,27 @@
       if (wasSingle && isDragging) {
         isDragging = false;
         if (!dragMoved) {
-          const rect = mapCanvas.getBoundingClientRect();
-          const hit = hitTest(e.clientX - rect.left, e.clientY - rect.top);
-          selectTarget(hit, false);
+          const rect = fxCanvas.getBoundingClientRect();
+          selectTarget(hitTest(e.clientX - rect.left, e.clientY - rect.top), false);
         }
       }
       if (activePointers.size === 0) isDragging = false;
     }
 
-    mapCanvas.addEventListener("pointerup", onPointerEnd);
-    mapCanvas.addEventListener("pointercancel", onPointerEnd);
-    mapCanvas.addEventListener("pointerleave", () => {
+    fxCanvas.addEventListener("pointerup", onPointerEnd);
+    fxCanvas.addEventListener("pointercancel", onPointerEnd);
+    fxCanvas.addEventListener("pointerleave", () => {
       if (!isDragging && activePointers.size === 0) {
         state.hovered = null;
         tooltipEl.classList.add("hidden");
-        renderMap();
+        state.dirtyVec = true;
       }
     });
 
-    mapCanvas.addEventListener("wheel", (e) => {
+    fxCanvas.addEventListener("wheel", (e) => {
       e.preventDefault();
       state.camTarget = null;
-      const rect = mapCanvas.getBoundingClientRect();
+      const rect = fxCanvas.getBoundingClientRect();
       const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
       const newScale = Math.max(0.035, Math.min(3.5, state.cam.scale * Math.exp(-e.deltaY * 0.0014)));
       const ratio = newScale / state.cam.scale;
@@ -2510,7 +2641,7 @@
       state.cam.oy = sy - (sy - state.cam.oy) * ratio;
       state.cam.scale = newScale;
       updateScaleBar();
-      renderMap();
+      markCameraDirty();
     }, { passive: false });
 
     function zoomBy(factor) {
@@ -2518,11 +2649,7 @@
       const cx = w * 0.5, cy = h * 0.5;
       const newScale = Math.max(0.035, Math.min(3.5, state.cam.scale * factor));
       const ratio = newScale / state.cam.scale;
-      state.camTarget = {
-        scale: newScale,
-        ox: cx - (cx - state.cam.ox) * ratio,
-        oy: cy - (cy - state.cam.oy) * ratio,
-      };
+      state.camTarget = { scale: newScale, ox: cx - (cx - state.cam.ox) * ratio, oy: cy - (cy - state.cam.oy) * ratio };
     }
 
     document.getElementById("zoomInBtn").addEventListener("click", () => zoomBy(1.5));
@@ -2531,16 +2658,16 @@
       state.filterSgg = -1;
       document.getElementById("sggFilter").value = "";
       resetCamera(true);
+      markTimeDirty();
       updateSidebar();
     });
 
-    // Header segmented controls
     document.querySelectorAll("[data-metric]").forEach((btn) => {
       btn.addEventListener("click", () => {
         state.metric = btn.dataset.metric;
         document.querySelectorAll("[data-metric]").forEach((b) => b.classList.toggle("active", b === btn));
         updateLegend();
-        renderMap();
+        markTimeDirty();
       });
     });
 
@@ -2548,29 +2675,25 @@
       btn.addEventListener("click", () => {
         state.day = btn.dataset.day;
         document.querySelectorAll("[data-day]").forEach((b) => b.classList.toggle("active", b === btn));
+        markTimeDirty();
         updateSidebar();
         drawTimelineWave();
-        renderMap();
       });
     });
 
     function switchLevel(newLvl) {
       state.level = newLvl;
-      state.hovered = null;
-      state.selected = null;
+      state.hovered = null; state.selected = null;
       document.getElementById("detailPanel").classList.add("hidden");
       document.getElementById("overviewPanel").classList.remove("hidden");
       document.querySelectorAll("[data-level]").forEach((b) => b.classList.toggle("active", b.dataset.level === newLvl));
       updateScaleBar();
       updateLegend();
+      markTimeDirty();
       updateSidebar();
-      renderMap();
     }
 
-    document.querySelectorAll("[data-level]").forEach((btn) => {
-      btn.addEventListener("click", () => switchLevel(btn.dataset.level));
-    });
-
+    document.querySelectorAll("[data-level]").forEach((btn) => btn.addEventListener("click", () => switchLevel(btn.dataset.level)));
     document.querySelectorAll("[data-rank]").forEach((btn) => {
       btn.addEventListener("click", () => {
         state.rankTab = btn.dataset.rank;
@@ -2587,16 +2710,10 @@
     document.getElementById("detSiblingList").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-sib-id]");
       if (!btn) return;
-      const kind = btn.dataset.sibKind;
-      const id = Number(btn.dataset.sibId);
-      if (kind === "micro") {
-        selectTarget({ kind: "micro", id, parentIdx: Number(btn.dataset.sibParent), subIdx: Number(btn.dataset.sibSub) }, false);
-      } else if (kind === "dong" && state.level === "sgg") {
-        switchLevel("dong");
-        selectTarget({ kind: "dong", id }, true);
-      } else {
-        selectTarget({ kind, id }, true);
-      }
+      const kind = btn.dataset.sibKind, id = Number(btn.dataset.sibId);
+      if (kind === "micro") selectTarget({ kind: "micro", id, parentIdx: Number(btn.dataset.sibParent), subIdx: Number(btn.dataset.sibSub) }, false);
+      else if (kind === "dong" && state.level === "sgg") { switchLevel("dong"); selectTarget({ kind: "dong", id }, true); }
+      else selectTarget({ kind, id }, true);
     });
 
     document.getElementById("jumpParentDongBtn").addEventListener("click", (e) => {
@@ -2607,34 +2724,30 @@
 
     function openMobileSidebar() {
       const sb = document.getElementById("sidebar");
-      sb.classList.remove("hidden");
-      sb.classList.add("flex");
+      sb.classList.remove("hidden"); sb.classList.add("flex");
     }
     function closeMobileSidebar() {
       const sb = document.getElementById("sidebar");
-      sb.classList.add("hidden");
-      sb.classList.remove("flex");
+      sb.classList.add("hidden"); sb.classList.remove("flex");
     }
 
     document.getElementById("backToOverviewBtn").addEventListener("click", () => selectTarget(null));
     document.getElementById("toggleSidebarBtn").addEventListener("click", () => {
       const sb = document.getElementById("sidebar");
       if (sb.classList.contains("hidden")) openMobileSidebar(); else closeMobileSidebar();
-      setTimeout(resizeCanvas, 20);
+      setTimeout(resizeCanvases, 20);
     });
     document.getElementById("closeMobileSidebarBtn").addEventListener("click", closeMobileSidebar);
-    document.getElementById("openUploadBtnMobile").addEventListener("click", () => {
-      document.getElementById("uploadModal").classList.remove("hidden");
-    });
+    document.getElementById("openUploadBtnMobile").addEventListener("click", () => document.getElementById("uploadModal").classList.remove("hidden"));
 
-    // Layer toggles
     function bindLayerToggle(id, key) {
       const el = document.getElementById(id);
       el.addEventListener("click", () => {
         state.layers[key] = !state.layers[key];
         el.classList.toggle("active", state.layers[key]);
-        if (key === "micro") { updateScaleBar(); updateLegend(); }
-        renderMap();
+        if (key === "micro") { updateScaleBar(); updateLegend(); state.dirtyGL = true; }
+        else if (key === "pulse") state.dirtyFX = true;
+        else state.dirtyVec = true;
       });
     }
     bindLayerToggle("layerMicro", "micro");
@@ -2644,28 +2757,20 @@
     bindLayerToggle("layerDongBorder", "dongBorder");
     bindLayerToggle("layerSggBorder", "sggBorder");
 
-    // SGG Filter Dropdown
     const sggSelect = document.getElementById("sggFilter");
     SGGS.forEach((s) => {
       const opt = document.createElement("option");
-      opt.value = String(s.id);
-      opt.textContent = `${s.name} (${s.dongs.length}동)`;
+      opt.value = String(s.id); opt.textContent = `${s.name} (${s.dongs.length}동)`;
       sggSelect.appendChild(opt);
     });
     sggSelect.addEventListener("change", () => {
       const v = sggSelect.value;
-      if (v === "") {
-        state.filterSgg = -1;
-        resetCamera(true);
-      } else {
-        state.filterSgg = Number(v);
-        fitCameraToBBox(SGGS[state.filterSgg].bbox, true, 0.14);
-      }
+      if (v === "") { state.filterSgg = -1; resetCamera(true); }
+      else { state.filterSgg = Number(v); fitCameraToBBox(SGGS[state.filterSgg].bbox, true, 0.14); }
+      markTimeDirty();
       updateSidebar();
-      renderMap();
     });
 
-    // Instant Search (Searches 129 Sub-Anchors + 47 SGGs + 602 Dongs!)
     const searchInput = document.getElementById("searchInput");
     const searchResults = document.getElementById("searchResults");
     const clearSearchBtn = document.getElementById("clearSearchBtn");
@@ -2674,36 +2779,27 @@
       const term = q.trim().toLowerCase();
       clearSearchBtn.classList.toggle("hidden", !term);
       if (!term) { searchResults.classList.add("hidden"); return; }
-
       const matches = [];
       for (let i = 0; i < ANCHORS.length; i++) {
-        const a = ANCHORS[i];
-        if (a[5].toLowerCase().includes(term)) {
-          matches.push({ kind: "anchor", id: i, title: a[5], sub: `핵심 거점 · ${TYPE_LABELS[TYPE_KEYS[a[2]]]} (385m 확대)` });
+        if (ANCHORS[i][5].toLowerCase().includes(term)) {
+          matches.push({ kind: "anchor", id: i, title: ANCHORS[i][5], sub: `핵심 거점 · ${TYPE_LABELS[TYPE_KEYS[ANCHORS[i][2]]]} (385m 확대)` });
         }
         if (matches.length >= 8) break;
       }
-      for (const s of SGGS) {
-        if (s.name.toLowerCase().includes(term)) {
-          matches.push({ kind: "sgg", id: s.id, title: s.name, sub: `시·군·구 · ${s.dongs.length}개 행정동` });
-        }
-      }
+      for (const s of SGGS) if (s.name.toLowerCase().includes(term)) matches.push({ kind: "sgg", id: s.id, title: s.name, sub: `시·군·구 · ${s.dongs.length}개 행정동` });
       for (const d of DONGS) {
         if (d.nm.toLowerCase().includes(term) || d.fullName.toLowerCase().includes(term)) {
           matches.push({ kind: "dong", id: d.id, title: d.nm, sub: `${d.sggName}${d.anc ? " · " + d.anc : ""}` });
         }
         if (matches.length >= 24) break;
       }
-
-      if (matches.length === 0) {
-        searchResults.innerHTML = `<div class="px-3 py-2.5 text-[var(--muted-foreground)]">일치하는 지역 또는 거점이 없습니다.</div>`;
-      } else {
-        searchResults.innerHTML = matches.map((m) => `
+      searchResults.innerHTML = matches.length === 0
+        ? `<div class="px-3 py-2.5 text-[var(--muted-foreground)]">일치하는 지역 또는 거점이 없습니다.</div>`
+        : matches.map((m) => `
           <button data-sr-kind="${m.kind}" data-sr-id="${m.id}" class="rank-row w-full text-left px-3 py-2 border-b border-[var(--card-border)] last:border-b-0 cursor-pointer flex items-center justify-between gap-2">
             <span class="font-medium truncate">${m.title}</span>
             <span class="text-[12px] text-[var(--muted-foreground)] truncate">${m.sub}</span>
           </button>`).join("");
-      }
       searchResults.classList.remove("hidden");
     }
 
@@ -2712,11 +2808,8 @@
     searchResults.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-sr-id]");
       if (!btn) return;
-      const kind = btn.dataset.srKind;
-      const id = Number(btn.dataset.srId);
-      state.filterSgg = -1;
-      sggSelect.value = "";
-      searchResults.classList.add("hidden");
+      const kind = btn.dataset.srKind, id = Number(btn.dataset.srId);
+      state.filterSgg = -1; sggSelect.value = ""; searchResults.classList.add("hidden");
 
       if (kind === "anchor") {
         const a = ANCHORS[id];
@@ -2725,19 +2818,13 @@
         if (cid !== -1) selectTarget({ kind: "cell", id: cid }, true);
         else fitCameraToBBox([a[0] - 280, a[1] - 280, a[0] + 280, a[1] + 280], true, 0.14);
       } else if (kind === "sgg") {
-        if (state.level === "cell") {
-          fitCameraToBBox(SGGS[id].bbox, true, 0.14);
-        } else {
-          if (state.level !== "sgg") switchLevel("sgg");
-          selectTarget({ kind: "sgg", id }, true);
-        }
+        if (state.level === "cell") fitCameraToBBox(SGGS[id].bbox, true, 0.14);
+        else { if (state.level !== "sgg") switchLevel("sgg"); selectTarget({ kind: "sgg", id }, true); }
       } else {
-        // Dong search: if currently in cell mode, zoom straight into that dong's 1km/385m cells and select its center cell!
         const d = DONGS[id];
         if (state.level === "cell") {
           const cid = hitTestHex1km(d.cx, d.cy);
-          const b = d.bbox;
-          const cx = (b[0] + b[2]) * 0.5, cy = (b[1] + b[3]) * 0.5;
+          const b = d.bbox, cx = (b[0] + b[2]) * 0.5, cy = (b[1] + b[3]) * 0.5;
           const span = Math.max(b[2] - b[0], b[3] - b[1], 320);
           fitCameraToBBox([cx - span * 0.7, cy - span * 0.7, cx + span * 0.7, cy + span * 0.7], true, 0.14);
           if (cid !== -1) selectTarget({ kind: "cell", id: cid }, false);
@@ -2752,9 +2839,7 @@
       if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) searchResults.classList.add("hidden");
     });
 
-    // Timeline Controls (15분 96구간 & 1시간 24구간)
     const timeSlider = document.getElementById("timeSlider");
-
     function syncSliderFromHour() {
       const idx = state.timeStepMin === 15
         ? Math.round(((state.hour % 24) + 24) % 24 * 4) % 96
@@ -2762,19 +2847,15 @@
       timeSlider.value = String(idx);
       syncPresetChips(state.hour);
     }
-
     function setHour(h) {
       state.hour = ((h % 24) + 24) % 24;
       syncSliderFromHour();
+      markTimeDirty();
       updateSidebar();
       drawTimelineWave();
-      renderMap();
     }
-
     function syncPresetChips(h) {
-      document.querySelectorAll("[data-preset]").forEach((b) => {
-        b.classList.toggle("active", Math.abs(Number(b.dataset.preset) - h) < 0.13);
-      });
+      document.querySelectorAll("[data-preset]").forEach((b) => b.classList.toggle("active", Math.abs(Number(b.dataset.preset) - h) < 0.13));
     }
 
     document.querySelectorAll("[data-tstep]").forEach((btn) => {
@@ -2782,13 +2863,12 @@
         state.timeStepMin = Number(btn.dataset.tstep);
         document.querySelectorAll("[data-tstep]").forEach((b) => b.classList.toggle("active", b === btn));
         timeSlider.max = state.timeStepMin === 15 ? "95" : "23";
-        if (state.timeStepMin === 60) state.hour = Math.round(state.hour) % 24;
-        else state.hour = Math.round(state.hour * 4) / 4;
+        state.hour = state.timeStepMin === 60 ? Math.round(state.hour) % 24 : Math.round(state.hour * 4) / 4;
         syncSliderFromHour();
         updateLegend();
+        markTimeDirty();
         updateSidebar();
         drawTimelineWave();
-        renderMap();
       });
     });
 
@@ -2797,31 +2877,27 @@
       document.getElementById("playIcon").classList.toggle("hidden", state.playing);
       document.getElementById("pauseIcon").classList.toggle("hidden", !state.playing);
     }
-
     document.getElementById("playBtn").addEventListener("click", togglePlay);
     document.getElementById("prevStepBtn").addEventListener("click", () => {
       if (state.playing) togglePlay();
-      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
-      setHour(Math.round((state.hour - step) / step) * step);
+      const s = state.timeStepMin === 15 ? 0.25 : 1.0;
+      setHour(Math.round((state.hour - s) / s) * s);
     });
     document.getElementById("nextStepBtn").addEventListener("click", () => {
       if (state.playing) togglePlay();
-      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
-      setHour(Math.round((state.hour + step) / step) * step);
+      const s = state.timeStepMin === 15 ? 0.25 : 1.0;
+      setHour(Math.round((state.hour + s) / s) * s);
     });
-
     const speeds = [0.5, 1.0, 2.0];
     document.getElementById("speedBtn").addEventListener("click", (e) => {
       state.speed = speeds[(speeds.indexOf(state.speed) + 1) % speeds.length];
       e.currentTarget.textContent = state.speed.toFixed(1) + "×";
     });
-
     timeSlider.addEventListener("input", (e) => {
       if (state.playing) togglePlay();
       const v = Number(e.target.value);
       setHour(state.timeStepMin === 15 ? v * 0.25 : v);
     });
-
     document.querySelectorAll("[data-preset]").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (state.playing) togglePlay();
@@ -2830,29 +2906,26 @@
         setHour(h);
       });
     });
-
     waveCanvas.addEventListener("click", (e) => {
       const rect = waveCanvas.getBoundingClientRect();
       const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - 8) / (rect.width - 16)));
       if (state.playing) togglePlay();
-      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
-      setHour(Math.round((frac * 23.75) / step) * step);
+      const s = state.timeStepMin === 15 ? 0.25 : 1.0;
+      setHour(Math.round((frac * 23.75) / s) * s);
     });
-
     document.getElementById("detailChart").addEventListener("click", (e) => {
       const rect = e.currentTarget.getBoundingClientRect();
       const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - 34) / (rect.width - 44)));
       if (state.playing) togglePlay();
-      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
-      setHour(Math.round((frac * 23.75) / step) * step);
+      const s = state.timeStepMin === 15 ? 0.25 : 1.0;
+      setHour(Math.round((frac * 23.75) / s) * s);
     });
-
     window.addEventListener("keydown", (e) => {
       if (document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
-      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
+      const s = state.timeStepMin === 15 ? 0.25 : 1.0;
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
-      else if (e.key === "ArrowLeft") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.round((state.hour - step) / step) * step); }
-      else if (e.key === "ArrowRight") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.round((state.hour + step) / step) * step); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.round((state.hour - s) / s) * s); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.round((state.hour + s) / s) * s); }
       else if (e.key === "Escape") { selectTarget(null); document.getElementById("uploadModal").classList.add("hidden"); }
       else if (e.key === "+" || e.key === "=") zoomBy(1.4);
       else if (e.key === "-") zoomBy(1 / 1.4);
@@ -2860,7 +2933,7 @@
     });
 
     // -----------------------------------------------------------------------
-    // 10. Real Data CSV / JSON Upload & Export (Propagates to 11,286 Cells!)
+    // 11. Real Data CSV / JSON Upload & Export
     // -----------------------------------------------------------------------
     const uploadModal = document.getElementById("uploadModal");
     const uploadStatus = document.getElementById("uploadStatus");
@@ -2875,17 +2948,10 @@
     dropZone.addEventListener("click", () => fileInput.click());
     dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.style.borderColor = "var(--primary)"; });
     dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = ""; });
-    dropZone.addEventListener("drop", (e) => {
-      e.preventDefault(); dropZone.style.borderColor = "";
-      if (e.dataTransfer.files[0]) handleUploadFile(e.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener("change", () => {
-      if (fileInput.files[0]) handleUploadFile(fileInput.files[0]);
-      fileInput.value = "";
-    });
+    dropZone.addEventListener("drop", (e) => { e.preventDefault(); dropZone.style.borderColor = ""; if (e.dataTransfer.files[0]) handleUploadFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener("change", () => { if (fileInput.files[0]) handleUploadFile(fileInput.files[0]); fileInput.value = ""; });
 
-    const dongByCd = new Map();
-    const dongByFull = new Map();
+    const dongByCd = new Map(), dongByFull = new Map();
     for (const d of DONGS) {
       dongByCd.set(String(d.cd).trim(), d);
       dongByCd.set(String(d.cd).slice(0, 8), d);
@@ -2907,39 +2973,30 @@
       const matchedDongs = new Set();
       let updatedCells = 0;
       const hasWeekend = records.some((r) => String(r.day_type || "").toLowerCase().includes("end") || String(r.day_type || "") === "we" || String(r.day_type || "") === "주말");
-
       for (const r of records) {
         let d = null;
         if (r.adm_cd) d = dongByCd.get(String(r.adm_cd).trim()) || dongByCd.get(String(r.adm_cd).trim().slice(0, 8));
         if (!d && r.sggnm && r.dongnm) d = dongByFull.get((String(r.sggnm) + "|" + String(r.dongnm)).replace(/\s+/g, ""));
         if (!d) continue;
-        const h = parseInt(r.hour, 10);
-        const v = parseFloat(r.traffic_gbps ?? r.traffic ?? r.value);
+        const h = parseInt(r.hour, 10), v = parseFloat(r.traffic_gbps ?? r.traffic ?? r.value);
         if (isNaN(h) || h < 0 || h > 23 || isNaN(v) || v < 0) continue;
         const dt = String(r.day_type || "weekday").toLowerCase();
         const isWe = dt.includes("end") || dt === "we" || dt === "주말";
-        if (isWe) d.we[h] = v;
-        else { d.wd[h] = v; if (!hasWeekend) d.we[h] = v; }
-        matchedDongs.add(d.id);
-        updatedCells++;
+        if (isWe) d.we[h] = v; else { d.wd[h] = v; if (!hasWeekend) d.we[h] = v; }
+        matchedDongs.add(d.id); updatedCells++;
       }
-
       if (matchedDongs.size === 0) {
         uploadStatus.classList.remove("hidden");
         uploadStatus.innerHTML = `<span class="text-[#dc2626] font-semibold">매칭된 행정동이 없습니다.</span> 컬럼명을 확인해 주세요.`;
         return;
       }
-
       recomputeAggregates();
       refreshAllCellScales();
       state.customDataName = filename;
       document.getElementById("dataSourceTag").textContent = `사용자 데이터 · ${matchedDongs.size}/602 동`;
       uploadStatus.classList.remove("hidden");
       uploadStatus.innerHTML = `<span class="text-[#16a34a] font-semibold">적용 완료!</span> ${matchedDongs.size}개 행정동 (${updatedCells.toLocaleString()}개 셀) 및 하위 11,286개 1km 셀에 반영되었습니다.`;
-      updateLegend();
-      updateSidebar();
-      drawTimelineWave();
-      renderMap();
+      updateLegend(); markTimeDirty(); updateSidebar(); drawTimelineWave();
     }
 
     function handleUploadFile(file) {
@@ -2973,51 +3030,48 @@
 
     document.getElementById("downloadCsvBtn").addEventListener("click", () => {
       const rows = ["adm_cd,sggnm,dongnm,day_type,hour,traffic_gbps"];
-      for (const d of DONGS) {
-        for (const [dk, arr] of [["weekday", d.wd], ["weekend", d.we]]) {
-          for (let h = 0; h < 24; h++) rows.push(`${d.cd},${d.sggName},${d.nm},${dk},${h},${arr[h]}`);
-        }
-      }
+      for (const d of DONGS) for (const [dk, arr] of [["weekday", d.wd], ["weekend", d.we]]) for (let h = 0; h < 24; h++) rows.push(`${d.cd},${d.sggName},${d.nm},${dk},${h},${arr[h]}`);
       const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "gyeonggi_mobile_traffic_602dongs.csv"; a.click();
+      const a = document.createElement("a"); a.href = url; a.download = "gyeonggi_mobile_traffic_602dongs.csv"; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
 
     document.getElementById("resetDataBtn").addEventListener("click", () => {
       for (const d of DONGS) { d.wd = d.origWd.slice(); d.we = d.origWe.slice(); }
-      recomputeAggregates();
-      refreshAllCellScales();
+      recomputeAggregates(); refreshAllCellScales();
       state.customDataName = null;
       document.getElementById("dataSourceTag").textContent = `${HEX_COUNT.toLocaleString()} 셀 · 602 동`;
       uploadStatus.classList.remove("hidden");
       uploadStatus.innerHTML = `<span class="font-semibold">내장 경기도 초정밀 모델 데이터로 복원되었습니다.</span>`;
-      updateLegend(); updateSidebar(); drawTimelineWave(); renderMap();
+      updateLegend(); markTimeDirty(); updateSidebar(); drawTimelineWave();
     });
 
     window.addEventListener("themechange", () => {
       updateLegend(); drawTimelineWave();
       if (state.selected) updateDetailInspector();
-      renderMap();
+      markCameraDirty();
     });
 
     const ro = new ResizeObserver(() => {
-      resizeCanvas(); drawTimelineWave();
+      resizeCanvases(); drawTimelineWave();
       if (state.selected) updateDetailInspector();
     });
     ro.observe(mapStage);
 
     // -----------------------------------------------------------------------
-    // 11. Boot
+    // 12. Boot
     // -----------------------------------------------------------------------
-    resizeCanvas();
+    resizeCanvases();
     resetCamera(false);
     updateScaleBar();
     updateLegend();
+    recomputeFrameMetrics();
     updateSidebar();
     drawTimelineWave();
-    renderMap();
+    renderGLLayer();
+    renderVectorLayer();
+    renderFXLayer();
     requestAnimationFrame(tick);
   })();
   </script>
