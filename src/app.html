@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>경기도 행정동별 모바일 통신 트래픽 변화량 시각화</title>
+  <title>경기도 초정밀 셀·행정동별 모바일 통신 트래픽 변화량 시각화</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -17,9 +17,7 @@
       overscroll-behavior: none;
       font-feature-settings: "tnum" 1;
     }
-    #mapCanvas {
-      touch-action: none;
-    }
+    #mapCanvas { touch-action: none; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     .tabular-nums { font-variant-numeric: tabular-nums; }
@@ -85,12 +83,8 @@
       color: var(--foreground);
       font-weight: 600;
     }
-    .rank-row {
-      transition: background-color 0.12s ease;
-    }
-    .rank-row:hover {
-      background: color-mix(in srgb, var(--foreground) 6%, transparent);
-    }
+    .rank-row { transition: background-color 0.12s ease; }
+    .rank-row:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
     .modal-backdrop {
       background: rgba(0, 0, 0, 0.52);
       backdrop-filter: blur(4px);
@@ -107,14 +101,15 @@
         <div class="flex items-center gap-2 min-w-0">
           <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center shrink-0">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-              <path d="M2 17l10 5 10-5"/>
-              <path d="M2 12l10 5 10-5"/>
+              <polygon points="12 2 21 7 21 17 12 22 3 17 3 7 12 2"/>
+              <line x1="12" y1="22" x2="12" y2="12"/>
+              <line x1="21" y1="7" x2="12" y2="12"/>
+              <line x1="3" y1="7" x2="12" y2="12"/>
             </svg>
           </div>
           <div class="min-w-0 flex items-center gap-2">
             <h1 class="text-xs sm:text-sm font-semibold tracking-tight truncate">경기도 모바일 트래픽 변화량 맵</h1>
-            <span id="dataSourceTag" class="hidden sm:inline-block text-[12px] px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)] font-medium shrink-0">602 행정동 · 시뮬레이션</span>
+            <span id="dataSourceTag" class="hidden sm:inline-block text-[12px] px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)] font-medium shrink-0">11,286 셀 · 602 동</span>
           </div>
         </div>
         <div class="flex lg:hidden items-center gap-1.5 shrink-0">
@@ -123,14 +118,14 @@
         </div>
       </div>
 
-      <!-- Primary Controls: Metric + Day + Resolution (horizontally scrollable on mobile) -->
+      <!-- Primary Controls: Metric + Day + Spatial Resolution -->
       <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-0.5 lg:pb-0">
         <!-- Metric Mode -->
         <div class="flex items-center p-0.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs shrink-0" role="group" aria-label="지표 선택">
-          <button class="seg-btn active px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="deltaPct" title="직전 1시간 대비 트래픽 증감률(%)">변화율 Δ%</button>
-          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="deltaAbs" title="직전 1시간 대비 트래픽 절대 증감량(Gbps)">ΔGbps</button>
-          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="vsAvg" title="해당 지역 24시간 일평균 대비 현재 시각 편차(%)">일평균 대비</button>
-          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="volume" title="현재 시각 총 모바일 트래픽(Gbps)">총 트래픽</button>
+          <button class="seg-btn active px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="deltaPct" title="직전 구간 대비 트래픽 증감률(%)">변화율 Δ%</button>
+          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="deltaAbs" title="직전 구간 대비 트래픽 절대 증감량">Δ트래픽</button>
+          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="vsAvg" title="해당 지역 24시간 평균 대비 현재 시각 편차(%)">일평균 대비</button>
+          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-metric="volume" title="현재 시각 총 모바일 트래픽">총 트래픽</button>
         </div>
 
         <!-- Day Type -->
@@ -139,16 +134,17 @@
           <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-day="we">주말</button>
         </div>
 
-        <!-- Spatial Level -->
+        <!-- Spatial Level (3-Tier + Auto 385m Micro-Cell) -->
         <div class="flex items-center p-0.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs shrink-0" role="group" aria-label="공간 해상도">
-          <button class="seg-btn active px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="dong">읍·면·동</button>
-          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="sgg">시·군·구</button>
+          <button class="seg-btn active px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="cell" title="1km 육각 기지국 셀 11,286개 (확대 시 385m 79K 초미세 자동 분할)">초정밀 셀</button>
+          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="dong" title="경기도 602개 행정동(읍·면·동)">읍·면·동</button>
+          <button class="seg-btn px-2 sm:px-2.5 py-1 rounded-md cursor-pointer" data-level="sgg" title="경기도 47개 시·군·구">시·군·구</button>
         </div>
 
         <!-- Data Upload (Desktop) -->
         <button id="openUploadBtn" class="hidden lg:flex px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-medium items-center gap-1.5 cursor-pointer shrink-0" title="실제 행정동별 시간대 트래픽 CSV 또는 JSON 파일 불러오기">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <span>실데이터 업로드</span>
+          <span>실데이터</span>
         </button>
       </div>
     </header>
@@ -163,14 +159,14 @@
         <!-- Top-Left Floating Search & Layer Bar -->
         <div class="absolute top-2.5 left-2.5 right-2.5 sm:right-auto flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-start gap-1.5 sm:gap-2 pointer-events-none z-10">
           <div class="flex items-center gap-1.5 pointer-events-auto">
-            <!-- Search Input -->
-            <div class="relative flex-1 sm:flex-none sm:w-60">
+            <!-- Search Input (Searches SGGs, 602 Dongs, AND 129 Sub-Anchors!) -->
+            <div class="relative flex-1 sm:flex-none sm:w-64">
               <div class="glass-panel flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border)] shadow-sm">
                 <svg class="shrink-0 text-[var(--muted-foreground)]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input id="searchInput" type="text" placeholder="동·시·군 검색 (삼평동, 동탄)" class="w-full bg-transparent text-xs text-[var(--foreground)] placeholder-[var(--muted-foreground)] outline-none" autocomplete="off" />
+                <input id="searchInput" type="text" placeholder="동·역·거점 검색 (판교역, 삼성전자, 동탄)" class="w-full bg-transparent text-xs text-[var(--foreground)] placeholder-[var(--muted-foreground)] outline-none" autocomplete="off" />
                 <button id="clearSearchBtn" class="hidden text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-xs cursor-pointer">✕</button>
               </div>
-              <div id="searchResults" class="hidden absolute left-0 right-0 mt-1 max-h-56 overflow-y-auto thin-scroll rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg text-xs z-30"></div>
+              <div id="searchResults" class="hidden absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto thin-scroll rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg text-xs z-30"></div>
             </div>
 
             <!-- SGG Quick Filter -->
@@ -181,25 +177,30 @@
 
           <!-- Overlay Toggles -->
           <div class="pointer-events-auto flex items-center gap-1 overflow-x-auto no-scrollbar">
-            <button id="layerPulse" class="chip-btn active glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="급증/급감 상위 행정동 펄스 마커 표시">급변 펄스</button>
+            <button id="layerMicro" class="chip-btn active glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="확대 시 1km 셀을 385m 7-분할(H3) 초미세 셀로 자동 세분화">400m 자동분할</button>
+            <button id="layerPulse" class="chip-btn active glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="급증/급감 상위 셀·행정동 펄스 마커 표시">급변 펄스</button>
             <button id="layerHighway" class="chip-btn active glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="경기도 주요 고속도로 축 표시">고속도로</button>
             <button id="layerLandmarks" class="chip-btn glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="판교TV·삼성전자·에버랜드 등 주요 거점 핀 표시">주요 거점</button>
-            <button id="layerSggBorder" class="chip-btn active glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="시·군·구 외곽 경계선 강조">시군구 경계</button>
+            <button id="layerDongBorder" class="chip-btn glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="602개 행정동(읍·면·동) 경계선 표시">행정동 경계</button>
+            <button id="layerSggBorder" class="chip-btn active glass-panel px-2 py-1 sm:py-1.5 rounded-lg border border-[var(--border)] text-xs cursor-pointer" title="47개 시·군·구 외곽 경계선 강조">시군구 경계</button>
           </div>
         </div>
 
         <!-- Bottom-Left Floating Legend -->
-        <div class="absolute bottom-2.5 left-2.5 pointer-events-auto glass-panel px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-[var(--border)] shadow-sm z-10 w-48 sm:w-72">
+        <div class="absolute bottom-2.5 left-2.5 pointer-events-auto glass-panel px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-[var(--border)] shadow-sm z-10 w-52 sm:w-72">
           <div class="flex items-center justify-between text-xs mb-1">
-            <span id="legendTitle" class="font-semibold text-[var(--foreground)] truncate">전시간 대비 변화율 (Δ%)</span>
-            <span id="legendSub" class="hidden sm:inline text-[var(--muted-foreground)] tabular-nums shrink-0 ml-1">t vs t-1h</span>
+            <span id="legendTitle" class="font-semibold text-[var(--foreground)] truncate">15분 전 대비 변화율 (Δ%)</span>
+            <span id="legendSub" class="hidden sm:inline text-[var(--muted-foreground)] tabular-nums shrink-0 ml-1">t vs t-15m</span>
           </div>
           <div id="legendRamp" class="w-full h-2 sm:h-2.5 rounded-sm border border-[var(--border)]"></div>
           <div id="legendTicks" class="flex items-center justify-between text-[12px] text-[var(--muted-foreground)] tabular-nums mt-1"></div>
         </div>
 
-        <!-- Bottom-Right Zoom & Scale Controls -->
+        <!-- Bottom-Right Resolution Indicator + Zoom & Scale Controls -->
         <div class="absolute bottom-2.5 right-2.5 flex flex-col items-end gap-1.5 pointer-events-none z-10">
+          <div id="resBadge" class="glass-panel px-2 py-1 rounded-md border border-[var(--border)] text-[12px] font-mono tabular-nums text-[var(--foreground)] shadow-sm">
+            1.0 km 셀 · 11,286개
+          </div>
           <div class="pointer-events-auto flex flex-col rounded-lg border border-[var(--border)] glass-panel shadow-sm overflow-hidden">
             <button id="zoomInBtn" class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center text-sm font-semibold hover:bg-[var(--secondary)] border-b border-[var(--border)] cursor-pointer" title="확대 (+)">+</button>
             <button id="zoomOutBtn" class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center text-sm font-semibold hover:bg-[var(--secondary)] border-b border-[var(--border)] cursor-pointer" title="축소 (-)">−</button>
@@ -214,7 +215,7 @@
         </div>
 
         <!-- Floating Hover Tooltip (Desktop) -->
-        <div id="mapTooltip" class="hidden pointer-events-none fixed z-40 glass-panel border border-[var(--border)] rounded-lg shadow-xl px-3 py-2.5 w-64 text-xs">
+        <div id="mapTooltip" class="hidden pointer-events-none fixed z-40 glass-panel border border-[var(--border)] rounded-lg shadow-xl px-3 py-2.5 w-68 text-xs">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
               <div id="ttSgg" class="text-[12px] text-[var(--muted-foreground)] truncate"></div>
@@ -222,13 +223,14 @@
             </div>
             <span id="ttType" class="shrink-0 px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)] text-[12px]"></span>
           </div>
+          <div id="ttAnchor" class="hidden text-[12px] text-[var(--muted-foreground)] mt-0.5 truncate"></div>
           <div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[var(--card-border)]">
             <div>
               <div class="text-[12px] text-[var(--muted-foreground)]">현재 트래픽</div>
               <div id="ttVol" class="text-sm font-semibold tabular-nums"></div>
             </div>
             <div>
-              <div class="text-[12px] text-[var(--muted-foreground)]">전시간 대비</div>
+              <div id="ttDeltaLabel" class="text-[12px] text-[var(--muted-foreground)]">직전 대비</div>
               <div id="ttDelta" class="text-sm font-semibold tabular-nums"></div>
             </div>
           </div>
@@ -237,7 +239,7 @@
               <span>24시간 추이</span>
               <span id="ttVsAvg" class="tabular-nums"></span>
             </div>
-            <canvas id="ttSpark" width="228" height="36" class="w-full h-9 block"></canvas>
+            <canvas id="ttSpark" width="236" height="36" class="w-full h-9 block"></canvas>
           </div>
         </div>
       </main>
@@ -247,16 +249,17 @@
         <!-- Mobile Sheet Grabber & Close Bar -->
         <div class="lg:hidden shrink-0 flex items-center justify-between px-3.5 py-2 border-b border-[var(--card-border)]">
           <div class="w-9 h-1 rounded-full bg-[var(--border)]"></div>
-          <span class="text-xs font-semibold text-[var(--muted-foreground)]">지역 분석 패널</span>
+          <span class="text-xs font-semibold text-[var(--muted-foreground)]">지역·셀 분석 패널</span>
           <button id="closeMobileSidebarBtn" class="px-2 py-0.5 rounded text-xs font-semibold text-[var(--foreground)] bg-[var(--secondary)] cursor-pointer">닫기 ✕</button>
         </div>
-        <!-- Overview Panel (Shown when no region is pinned) -->
+
+        <!-- Overview Panel -->
         <div id="overviewPanel" class="flex-1 flex flex-col min-h-0 overflow-y-auto thin-scroll">
           <!-- KPI Header -->
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold text-[var(--muted-foreground)]">경기도 전체 실시간 요약</span>
-              <span id="kpiTimeBadge" class="text-xs font-mono tabular-nums font-semibold text-[var(--foreground)]">평일 08:00</span>
+              <span id="kpiTimeBadge" class="text-xs font-mono tabular-nums font-semibold text-[var(--foreground)]">평일 08:15</span>
             </div>
             <div class="grid grid-cols-3 gap-2">
               <div class="p-2 rounded-lg bg-[var(--background)] border border-[var(--card-border)]">
@@ -264,7 +267,7 @@
                 <div id="kpiTotal" class="text-sm font-bold tabular-nums mt-0.5">—</div>
               </div>
               <div class="p-2 rounded-lg bg-[var(--background)] border border-[var(--card-border)]">
-                <div class="text-[12px] text-[var(--muted-foreground)]">1시간 변화</div>
+                <div id="kpiDeltaTitle" class="text-[12px] text-[var(--muted-foreground)]">15분 변화</div>
                 <div id="kpiDelta" class="text-sm font-bold tabular-nums mt-0.5">—</div>
               </div>
               <div class="p-2 rounded-lg bg-[var(--background)] border border-[var(--card-border)]">
@@ -277,7 +280,7 @@
           <!-- Top Movers Ranking -->
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between gap-2 mb-2.5">
-              <h2 class="text-xs font-semibold text-[var(--foreground)]">시간대별 변화 TOP 지역</h2>
+              <h2 id="rankHeading" class="text-xs font-semibold text-[var(--foreground)]">시간대별 변화 TOP 셀</h2>
               <div class="flex items-center p-0.5 rounded-md bg-[var(--background)] border border-[var(--border)] text-[12px]">
                 <button class="seg-btn active px-2 py-0.5 rounded cursor-pointer" data-rank="surge">급증</button>
                 <button class="seg-btn px-2 py-0.5 rounded cursor-pointer" data-rank="drop">급감</button>
@@ -291,16 +294,16 @@
           <div class="p-3.5">
             <div class="flex items-center justify-between mb-2">
               <h2 class="text-xs font-semibold text-[var(--foreground)]">도시 기능 유형별 평균 변화율</h2>
-              <span class="text-[12px] text-[var(--muted-foreground)]">전시간 대비</span>
+              <span id="archSubLabel" class="text-[12px] text-[var(--muted-foreground)]">15분 전 대비</span>
             </div>
             <div id="archetypeBars" class="space-y-2"></div>
             <p class="mt-3 text-[12px] leading-relaxed text-[var(--muted-foreground)]">
-              지도에서 임의의 읍·면·동을 클릭하면 24시간 트래픽 곡선, 시간당 증감 막대, 평일·주말 비교 및 5G/서비스 구성을 상세 확인할 수 있습니다.
+              지도를 확대하면 1km 기지국 셀이 자동으로 <strong>385m(7-분할 H3) 초미세 셀</strong>로 세분화됩니다. 임의의 셀이나 행정동을 클릭해 15분 단위 24시간 변화 곡선을 확인하세요.
             </p>
           </div>
         </div>
 
-        <!-- Detail Inspector Panel (Shown when a region is clicked/pinned) -->
+        <!-- Detail Inspector Panel -->
         <div id="detailPanel" class="hidden flex-1 flex flex-col min-h-0 overflow-y-auto thin-scroll">
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between gap-2 mb-2">
@@ -318,6 +321,9 @@
               <span id="detType" class="shrink-0 px-2 py-0.5 rounded bg-[var(--secondary)] text-xs font-medium text-[var(--foreground)]"></span>
             </div>
             <div id="detMeta" class="mt-1.5 text-xs text-[var(--muted-foreground)]"></div>
+            <div id="detParentAction" class="hidden mt-2">
+              <button id="jumpParentDongBtn" class="px-2.5 py-1 rounded-md bg-[var(--secondary)] hover:opacity-90 border border-[var(--border)] text-xs font-medium cursor-pointer"></button>
+            </div>
 
             <!-- 4 KPI Readouts -->
             <div class="grid grid-cols-2 gap-2 mt-3">
@@ -326,7 +332,7 @@
                 <div id="detVol" class="text-sm font-bold tabular-nums mt-0.5"></div>
               </div>
               <div class="p-2 rounded-lg bg-[var(--background)] border border-[var(--card-border)]">
-                <div class="text-[12px] text-[var(--muted-foreground)]">전시간 대비 변화</div>
+                <div id="detDeltaLbl" class="text-[12px] text-[var(--muted-foreground)]">직전 대비 변화</div>
                 <div id="detDelta" class="text-sm font-bold tabular-nums mt-0.5"></div>
               </div>
               <div class="p-2 rounded-lg bg-[var(--background)] border border-[var(--card-border)]">
@@ -343,14 +349,14 @@
           <!-- 24h Interactive Chart -->
           <div class="p-3.5 border-b border-[var(--card-border)]">
             <div class="flex items-center justify-between mb-1.5">
-              <h3 class="text-xs font-semibold">24시간 트래픽 추이 &amp; 시간당 변화량</h3>
+              <h3 class="text-xs font-semibold">24시간 트래픽 추이 &amp; 구간 변화량</h3>
               <span class="text-[12px] text-[var(--muted-foreground)]">클릭하여 시간 이동</span>
             </div>
             <canvas id="detailChart" width="320" height="156" class="w-full h-40 block cursor-pointer rounded bg-[var(--background)] border border-[var(--card-border)]"></canvas>
             <div class="flex items-center justify-between text-[12px] text-[var(--muted-foreground)] mt-1.5">
               <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 bg-[var(--primary)]"></span><span id="detCurvePrimary">평일</span></span>
               <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0 border-t border-dashed border-[var(--muted-foreground)]"></span><span id="detCurveAlt">주말 비교</span></span>
-              <span>막대: Δ Gbps</span>
+              <span id="detBarUnit">막대: Δ</span>
             </div>
           </div>
 
@@ -367,9 +373,9 @@
             <div id="detServiceMix" class="space-y-1.5 text-xs"></div>
           </div>
 
-          <!-- Sibling Dongs in Same SGG -->
+          <!-- Sibling / Nearby Comparison -->
           <div class="p-3.5">
-            <h3 id="detSiblingTitle" class="text-xs font-semibold mb-2">동일 시·군·구 내 변화량 상위 지역</h3>
+            <h3 id="detSiblingTitle" class="text-xs font-semibold mb-2">인근 변화량 상위 지역</h3>
             <div id="detSiblingList" class="space-y-1"></div>
           </div>
         </div>
@@ -377,30 +383,37 @@
     </div>
 
     <!-- Bottom Timeline Controller -->
-    <footer class="shrink-0 bg-[var(--card)] border-t border-[var(--border)] px-3.5 py-2.5 z-20">
-      <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-        <!-- Playback Controls + Clock -->
-        <div class="flex items-center gap-2 shrink-0">
-          <button id="playBtn" class="w-9 h-9 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center hover:opacity-90 cursor-pointer shrink-0" title="재생 / 일시정지 (Space)">
-            <svg id="playIcon" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
-            <svg id="pauseIcon" class="hidden" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-          </button>
-          <div class="flex items-center rounded-lg border border-[var(--border)] bg-[var(--background)] overflow-hidden text-xs">
-            <button id="prevHourBtn" class="px-2 py-1.5 hover:bg-[var(--secondary)] cursor-pointer" title="1시간 전 (←)">◀</button>
-            <button id="nextHourBtn" class="px-2 py-1.5 hover:bg-[var(--secondary)] border-l border-[var(--border)] cursor-pointer" title="1시간 후 (→)">▶</button>
+    <footer class="shrink-0 bg-[var(--card)] border-t border-[var(--border)] px-3 py-2 z-20">
+      <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2.5 md:gap-3">
+        <!-- Playback Controls + Time Granularity + Clock -->
+        <div class="flex items-center justify-between md:justify-start gap-2 shrink-0">
+          <div class="flex items-center gap-1.5">
+            <button id="playBtn" class="w-9 h-9 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center hover:opacity-90 cursor-pointer shrink-0" title="재생 / 일시정지 (Space)">
+              <svg id="playIcon" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+              <svg id="pauseIcon" class="hidden" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            </button>
+            <div class="flex items-center rounded-lg border border-[var(--border)] bg-[var(--background)] overflow-hidden text-xs">
+              <button id="prevStepBtn" class="px-2 py-1.5 hover:bg-[var(--secondary)] cursor-pointer" title="이전 구간 (←)">◀</button>
+              <button id="nextStepBtn" class="px-2 py-1.5 hover:bg-[var(--secondary)] border-l border-[var(--border)] cursor-pointer" title="다음 구간 (→)">▶</button>
+            </div>
+            <button id="speedBtn" class="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-mono tabular-nums cursor-pointer" title="재생 속도">1.0×</button>
+            <!-- Time Step Granularity Toggle (15분 vs 1시간) -->
+            <div class="flex items-center p-0.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs" role="group" aria-label="시간 해상도">
+              <button class="seg-btn active px-2 py-1 rounded cursor-pointer" data-tstep="15" title="15분 단위 96구간 초정밀 시간 탐색">15분</button>
+              <button class="seg-btn px-2 py-1 rounded cursor-pointer" data-tstep="60" title="1시간 단위 24구간">1시간</button>
+            </div>
           </div>
-          <button id="speedBtn" class="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] text-xs font-mono tabular-nums cursor-pointer" title="재생 속도 변경">1.0×</button>
-          <div class="pl-1 min-w-[116px]">
-            <div id="clockTime" class="text-base font-bold font-mono tabular-nums leading-tight">08:00</div>
+          <div class="pl-1 min-w-[104px] text-right md:text-left">
+            <div id="clockTime" class="text-base font-bold font-mono tabular-nums leading-tight">08:15</div>
             <div id="clockPhase" class="text-[12px] text-[var(--muted-foreground)] leading-tight truncate">오전 출근 피크</div>
           </div>
         </div>
 
         <!-- Integrated 24h Province Waveform + Scrubber -->
         <div class="flex-1 min-w-0 flex flex-col gap-1">
-          <canvas id="timelineWave" height="30" class="w-full h-[30px] block cursor-pointer"></canvas>
+          <canvas id="timelineWave" height="28" class="w-full h-[28px] block cursor-pointer"></canvas>
           <div class="relative flex items-center">
-            <input id="timeSlider" type="range" min="0" max="23" step="1" value="8" class="time-slider" aria-label="시간대 선택 (0시~23시)" />
+            <input id="timeSlider" type="range" min="0" max="95" step="1" value="33" class="time-slider" aria-label="시간대 선택" />
           </div>
           <div class="flex justify-between text-[12px] text-[var(--muted-foreground)] font-mono tabular-nums px-0.5">
             <span>00시</span><span>04시</span><span>08시</span><span>12시</span><span>16시</span><span>20시</span><span>23시</span>
@@ -409,12 +422,12 @@
 
         <!-- Quick Time Presets -->
         <div class="hidden xl:flex items-center gap-1 shrink-0">
-          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="3">새벽 03시</button>
-          <button class="chip-btn active px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="8">출근 08시</button>
-          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="12">점심 12시</button>
-          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="15">오후 15시</button>
-          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="18">퇴근 18시</button>
-          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="21">저녁 21시</button>
+          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="3">03시</button>
+          <button class="chip-btn active px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="8.25">08:15</button>
+          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="12.25">12:15</button>
+          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="15">15시</button>
+          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="18.25">18:15</button>
+          <button class="chip-btn px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs cursor-pointer" data-preset="21">21시</button>
         </div>
       </div>
     </footer>
@@ -429,13 +442,13 @@
       </div>
       <div class="py-3 space-y-3">
         <p class="text-[var(--muted-foreground)] leading-relaxed">
-          통신사(SKT·KT·LGU+) 또는 경기데이터드림 등에서 확보한 <strong>행정동별·시간대별 트래픽 CSV/JSON</strong> 파일을 업로드하면 602개 경기도 행정동 지도에 즉시 반영됩니다. (모든 처리는 브라우저 내에서 로컬로 수행됩니다.)
+          통신사(SKT·KT·LGU+) 또는 경기데이터드림 등의 <strong>행정동별 시간대 트래픽 CSV/JSON</strong> 파일을 업로드하면 602개 행정동과 하위 <strong>11,286개 1km 셀·385m 초미세 셀</strong>에 즉시 비례 반영됩니다.
         </p>
 
         <div id="dropZone" class="border-2 border-dashed border-[var(--border)] rounded-lg p-5 text-center hover:border-[var(--primary)] transition-colors cursor-pointer bg-[var(--background)]">
           <input id="fileInput" type="file" accept=".csv,.json" class="hidden" />
           <div class="font-semibold text-sm mb-1">CSV 또는 JSON 파일을 드래그하거나 클릭하여 선택</div>
-          <div class="text-[var(--muted-foreground)]">지원 컬럼: <code class="font-mono">adm_cd</code> (또는 <code class="font-mono">sggnm, dongnm</code>), <code class="font-mono">hour</code> (0~23), <code class="font-mono">traffic_gbps</code>, <code class="font-mono">day_type</code> (선택: weekday/weekend)</div>
+          <div class="text-[var(--muted-foreground)]">지원 컬럼: <code class="font-mono">adm_cd</code> (또는 <code class="font-mono">sggnm, dongnm</code>), <code class="font-mono">hour</code> (0~23), <code class="font-mono">traffic_gbps</code>, <code class="font-mono">day_type</code></div>
         </div>
 
         <div id="uploadStatus" class="hidden p-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)]"></div>
@@ -451,14 +464,14 @@
     </div>
   </div>
 
-  <!-- Embedded Gyeonggi-do 602 행정동 Topology & Traffic Payload -->
+  <!-- Embedded Gyeonggi-do 602 행정동 + 11,286 1km Hex Lattice + 129 Sub-Anchors Payload -->
   <script id="gyeonggi-data" type="application/json">__GYEONGGI_DATA_JSON__</script>
 
   <script>
   (function () {
     "use strict";
 
-    // Standalone fallback ONLY when opened outside Antigravity host (never touches :root CSS rules)
+    // Standalone fallback ONLY when opened outside Antigravity host
     (function ensureStandaloneTheme() {
       const rootStyle = getComputedStyle(document.documentElement);
       if (!rootStyle.getPropertyValue("--background").trim()) {
@@ -484,24 +497,31 @@
     })();
 
     // -----------------------------------------------------------------------
-    // 1. Parse Embedded Topology & Traffic Data
+    // 1. Parse Embedded Topology, 602 Dongs, 47 SGGs, and 11,286 1km Hex Grid
     // -----------------------------------------------------------------------
     const BUNDLE = JSON.parse(document.getElementById("gyeonggi-data").textContent);
     const MAP_W = BUNDLE.meta.w;
     const MAP_H = BUNDLE.meta.h;
+    const KM_PER_UNIT = BUNDLE.meta.kmPerUnit || 0.0155;
+    const TYPE_KEYS = BUNDLE.meta.typeKeys;
     const TYPE_LABELS = BUNDLE.meta.typeLabels;
-    const KM_PER_UNIT = 155.0 / 10000.0; // ~0.0155 km per grid unit
+    const SQRT3 = Math.sqrt(3);
 
-    // Decode delta-encoded arcs once
+    function worldToLonLat(wx, wy) {
+      const px = BUNDLE.meta.minX + wx / BUNDLE.meta.scale;
+      const lat = BUNDLE.meta.maxY - wy / BUNDLE.meta.scale;
+      const lon = px / BUNDLE.meta.cosLat;
+      return [lon, lat];
+    }
+
+    // Decode shared arcs once
     const DECODED_ARCS = BUNDLE.arcs.map((raw) => {
       const pts = new Int16Array(raw.length);
       let x = raw[0], y = raw[1];
       pts[0] = x; pts[1] = y;
       for (let i = 2; i < raw.length; i += 2) {
-        x += raw[i];
-        y += raw[i + 1];
-        pts[i] = x;
-        pts[i + 1] = y;
+        x += raw[i]; y += raw[i + 1];
+        pts[i] = x; pts[i + 1] = y;
       }
       return pts;
     });
@@ -510,20 +530,18 @@
       let x = raw[0], y = raw[1];
       path.moveTo(x, y);
       for (let i = 2; i < raw.length; i += 2) {
-        x += raw[i];
-        y += raw[i + 1];
+        x += raw[i]; y += raw[i + 1];
         path.lineTo(x, y);
       }
       path.closePath();
     }
 
-    // Build Context Paths (Seoul & Incheon silhouettes)
     const SEOUL_PATH = new Path2D();
     for (const r of BUNDLE.context.seoul) decodeDeltaRingToPath(SEOUL_PATH, r);
     const INCHEON_PATH = new Path2D();
     for (const r of BUNDLE.context.incheon) decodeDeltaRingToPath(INCHEON_PATH, r);
 
-    // Build 602 Dong Path2D + BBoxes + Backup Traffic Arrays
+    // 602 Dongs
     const DONGS = BUNDLE.dongs.map((d) => {
       const path = new Path2D();
       let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
@@ -539,8 +557,7 @@
               const start = firstPt ? 0 : 2;
               for (let i = start; i < len; i += 2) {
                 const x = pts[i], y = pts[i + 1];
-                if (firstPt) { path.moveTo(x, y); firstPt = false; }
-                else path.lineTo(x, y);
+                if (firstPt) { path.moveTo(x, y); firstPt = false; } else path.lineTo(x, y);
                 if (x < minX) minX = x; if (x > maxX) maxX = x;
                 if (y < minY) minY = y; if (y > maxY) maxY = y;
               }
@@ -548,8 +565,7 @@
               const start = firstPt ? len - 2 : len - 4;
               for (let i = start; i >= 0; i -= 2) {
                 const x = pts[i], y = pts[i + 1];
-                if (firstPt) { path.moveTo(x, y); firstPt = false; }
-                else path.lineTo(x, y);
+                if (firstPt) { path.moveTo(x, y); firstPt = false; } else path.lineTo(x, y);
                 if (x < minX) minX = x; if (x > maxX) maxX = x;
                 if (y < minY) minY = y; if (y > maxY) maxY = y;
               }
@@ -567,10 +583,12 @@
         bbox: [minX, minY, maxX, maxY],
         origWd: d.wd.slice(),
         origWe: d.we.slice(),
+        scaleRatioWd: new Float32Array(24).fill(1),
+        scaleRatioWe: new Float32Array(24).fill(1),
       };
     });
 
-    // Build 47 SGG Objects (Dissolved Paths + Aggregated Traffic)
+    // 47 SGGs
     const SGGS = BUNDLE.sggs.map((s, idx) => {
       const path = new Path2D();
       let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
@@ -610,19 +628,289 @@
       };
     });
 
+    // -----------------------------------------------------------------------
+    // 2. Ultra-Granular 1km Hex Cell Lattice (11,286 cells) + 385m H3 Micro-Cells
+    // -----------------------------------------------------------------------
+    const HEX_R = BUNDLE.hexGrid.r; // 38 units ≈ 589m radius, 1.02km spacing
+    const HEX_DX = SQRT3 * HEX_R;
+    const HEX_DY = 1.5 * HEX_R;
+    const HEX_VERTS = new Float32Array(12); // pointy-top 1km hex vertex offsets
+    for (let k = 0; k < 6; k++) {
+      const ang = (Math.PI / 3) * k - Math.PI / 6;
+      HEX_VERTS[k * 2] = Math.cos(ang) * HEX_R * 1.015;
+      HEX_VERTS[k * 2 + 1] = Math.sin(ang) * HEX_R * 1.015;
+    }
+
+    // Aperture-7 H3-style 385m micro-hex geometry (exact seamless tiling!)
+    const MICRO_R = HEX_R / Math.sqrt(7);
+    const MICRO_D = SQRT3 * MICRO_R;
+    const MICRO_PHI = -Math.atan(SQRT3 / 5);
+    const MICRO_OFFSETS = [[0, 0]];
+    for (let k = 0; k < 6; k++) {
+      const ang = MICRO_PHI + (Math.PI / 3) * k;
+      MICRO_OFFSETS.push([Math.cos(ang) * MICRO_D, Math.sin(ang) * MICRO_D]);
+    }
+    const MICRO_VERTS = new Float32Array(12);
+    for (let k = 0; k < 6; k++) {
+      const ang = MICRO_PHI + Math.PI / 6 + (Math.PI / 3) * k;
+      MICRO_VERTS[k * 2] = Math.cos(ang) * MICRO_R * 1.015;
+      MICRO_VERTS[k * 2 + 1] = Math.sin(ang) * MICRO_R * 1.015;
+    }
+
+    // Highway segments in quantized map space for fast distance queries
+    const HW_SEGS = [];
+    for (const hw of BUNDLE.highways) {
+      for (let i = 0; i < hw.pts.length - 2; i += 2) {
+        HW_SEGS.push([hw.pts[i], hw.pts[i + 1], hw.pts[i + 2], hw.pts[i + 3]]);
+      }
+    }
+
+    function distToHighwayUnits(x, y) {
+      let bestSq = 1e12;
+      for (let i = 0; i < HW_SEGS.length; i++) {
+        const s = HW_SEGS[i];
+        const dx = s[2] - s[0], dy = s[3] - s[1];
+        const l2 = dx * dx + dy * dy;
+        let t = l2 > 0 ? ((x - s[0]) * dx + (y - s[1]) * dy) / l2 : 0;
+        if (t < 0) t = 0; else if (t > 1) t = 1;
+        const px = s[0] + t * dx - x, py = s[1] + t * dy - y;
+        const d2 = px * px + py * py;
+        if (d2 < bestSq) bestSq = d2;
+      }
+      return Math.sqrt(bestSq);
+    }
+
+    // Spatial bucket index over 129 sub-anchors for ~15ms synthesis of 11,286 cells
+    const ANCHORS = BUNDLE.model.anchors; // [qx, qy, typeIdx, radU, weight, name]
+    const ANC_BUCKET = 500;
+    const anchorBuckets = new Map();
+    for (let i = 0; i < ANCHORS.length; i++) {
+      const a = ANCHORS[i];
+      const range = a[3] * 2.8;
+      const gx0 = Math.floor((a[0] - range) / ANC_BUCKET);
+      const gx1 = Math.floor((a[0] + range) / ANC_BUCKET);
+      const gy0 = Math.floor((a[1] - range) / ANC_BUCKET);
+      const gy1 = Math.floor((a[1] + range) / ANC_BUCKET);
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gy = gy0; gy <= gy1; gy++) {
+          const key = gx * 64 + gy;
+          let arr = anchorBuckets.get(key);
+          if (!arr) { arr = []; anchorBuckets.set(key, arr); }
+          arr.push(i);
+        }
+      }
+    }
+
+    const MODEL_WD = BUNDLE.model.wd;
+    const MODEL_WE = BUNDLE.model.we;
+    const MODEL_HW_WD = BUNDLE.model.hwWd;
+    const MODEL_HW_WE = BUNDLE.model.hwWe;
+    const SEOUL_CX = BUNDLE.meta.seoulCenter[0];
+    const SEOUL_CY = BUNDLE.meta.seoulCenter[1];
+
+    function fastHash2D(x, y) {
+      let n = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263);
+      n = Math.imul(n ^ (n >>> 13), 1274126177);
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+    }
+
+    // Compute exact spatially-varying 24h weekday/weekend profile at ANY point (wx, wy) inside parent dong `did`
+    function computePointProfile(wx, wy, did, scaleMult = 1.0) {
+      const dong = DONGS[did];
+      const wArr = [0, 0, 0, 0, 0, 0, 0];
+      let bestAncIdx = -1;
+      let bestScore = 0;
+
+      const bk = anchorBuckets.get(Math.floor(wx / ANC_BUCKET) * 64 + Math.floor(wy / ANC_BUCKET));
+      if (bk) {
+        for (let j = 0; j < bk.length; j++) {
+          const ai = bk[j];
+          const a = ANCHORS[ai];
+          const dx = wx - a[0], dy = wy - a[1];
+          const rad = a[3];
+          const d2 = dx * dx + dy * dy;
+          if (d2 < rad * rad * 7.8) {
+            const infl = a[4] * Math.exp(-0.5 * d2 / (rad * rad));
+            wArr[a[2]] += infl;
+            if (infl > bestScore) { bestScore = infl; bestAncIdx = ai; }
+          }
+        }
+      }
+
+      // Baseline urban/rural background from parent dong
+      const isMyeon = dong.nm.endsWith("면");
+      const isEup = dong.nm.endsWith("읍");
+      if (isMyeon) wArr[6] += 0.65;
+      else if (isEup) { wArr[6] += 0.25; wArr[3] += 0.35; }
+      else wArr[3] += 0.38;
+
+      let totalW = 0;
+      let topTp = 6, topW = -1;
+      for (let t = 0; t < 7; t++) {
+        totalW += wArr[t];
+        if (wArr[t] > topW) { topW = wArr[t]; topTp = t; }
+      }
+      if (totalW < 1e-5) { wArr[6] = 1; totalW = 1; topTp = 6; }
+
+      const dHw = distToHighwayUnits(wx, wy);
+      // Crisp highway corridor ribbon (~1.1 km width = ~70 units)
+      const hwW = 0.48 * Math.exp(-0.5 * (dHw / 56) * (dHw / 56));
+      const dSeoul = Math.hypot(wx - SEOUL_CX, wy - SEOUL_CY) * KM_PER_UNIT;
+      const metro = Math.exp(-dSeoul / 36.0);
+
+      const hSeed = fastHash2D(Math.round(wx), Math.round(wy));
+      const jitter = 0.84 + 0.32 * hSeed;
+      const anchorBoost = 1.0 + 1.25 * Math.min(bestScore, 2.4) + 0.65 * hwW;
+      const baseCell = (0.28 + 1.55 * metro) * anchorBoost * jitter * (isMyeon ? 0.42 : isEup ? 0.72 : 1.0) * scaleMult;
+
+      const wd = new Float32Array(24);
+      const we = new Float32Array(24);
+      const phase = (hSeed - 0.5) * 0.14;
+      for (let h = 0; h < 24; h++) {
+        let vWd = 0, vWe = 0;
+        for (let t = 0; t < 7; t++) {
+          if (wArr[t] > 0) {
+            const sh = wArr[t] / totalW;
+            vWd += sh * MODEL_WD[t][h];
+            vWe += sh * MODEL_WE[t][h];
+          }
+        }
+        vWd = vWd * (1 - hwW * 0.55) + hwW * MODEL_HW_WD[h];
+        vWe = vWe * (1 - hwW * 0.55) + hwW * MODEL_HW_WE[h];
+        const microWave = 1.0 + 0.06 * Math.sin((h + hSeed * 12) * 0.75) + phase * Math.cos(h * 0.5);
+        wd[h] = Math.max(0.02, baseCell * vWd * microWave * dong.scaleRatioWd[h]);
+        we[h] = Math.max(0.02, baseCell * vWe * microWave * dong.scaleRatioWe[h]);
+      }
+
+      const g5Base = [76, 62, 72, 64, 54, 73, 43][topTp];
+      const g5 = Math.round(Math.max(30, Math.min(89, g5Base + 8 * metro + (hSeed - 0.5) * 8)));
+      const mixTemplates = [
+        [26, 22, 40, 12], [32, 24, 30, 14], [38, 30, 14, 18],
+        [52, 26, 12, 10], [34, 28, 8, 30], [48, 30, 14, 8], [40, 26, 10, 24]
+      ];
+      const mix = mixTemplates[topTp].slice();
+      if (hwW > 0.16) {
+        const sh = Math.min(12, Math.round(hwW * 28));
+        mix[3] += sh;
+        mix[0] = Math.max(12, mix[0] - sh);
+      }
+
+      let avgWd = 0, avgWe = 0;
+      for (let h = 0; h < 24; h++) { avgWd += wd[h]; avgWe += we[h]; }
+      avgWd /= 24; avgWe /= 24;
+
+      return {
+        tp: TYPE_KEYS[topTp],
+        typeLabel: TYPE_LABELS[TYPE_KEYS[topTp]],
+        anc: bestScore >= 0.35 && bestAncIdx !== -1 ? ANCHORS[bestAncIdx][5] : (hwW > 0.24 ? "고속도로 이동 축" : dong.anc),
+        g5,
+        mix,
+        wd,
+        we,
+        avgWd,
+        avgWe,
+      };
+    }
+
+    // Unpack RLE 1km Hex Grid -> 11,286 cells stored in ultra-fast typed structures
+    const HEX_COUNT = BUNDLE.hexGrid.count;
+    const cellX = new Float32Array(HEX_COUNT);
+    const cellY = new Float32Array(HEX_COUNT);
+    const cellCol = new Int16Array(HEX_COUNT);
+    const cellRow = new Int16Array(HEX_COUNT);
+    const cellDong = new Int16Array(HEX_COUNT);
+    const cellSgg = new Uint8Array(HEX_COUNT);
+    const cellTpIdx = new Uint8Array(HEX_COUNT);
+    const cellG5 = new Uint8Array(HEX_COUNT);
+    const cellWd = new Float32Array(HEX_COUNT * 24);
+    const cellWe = new Float32Array(HEX_COUNT * 24);
+    const cellAvgWd = new Float32Array(HEX_COUNT);
+    const cellAvgWe = new Float32Array(HEX_COUNT);
+    const cellAncName = new Array(HEX_COUNT);
+    const cellMix = new Array(HEX_COUNT);
+    const cellByKey = new Map();
+
+    function buildHexCells() {
+      const runs = BUNDLE.hexGrid.runs;
+      let idx = 0;
+      for (let i = 0; i < runs.length; i += 4) {
+        const row = runs[i], c0 = runs[i + 1], len = runs[i + 2], did = runs[i + 3];
+        const xOff = (row & 1) ? HEX_DX * 0.5 : 0;
+        const y = row * HEX_DY;
+        const sggId = DONGS[did].s;
+        for (let k = 0; k < len; k++) {
+          const col = c0 + k;
+          const x = xOff + col * HEX_DX;
+          cellX[idx] = x;
+          cellY[idx] = y;
+          cellCol[idx] = col;
+          cellRow[idx] = row;
+          cellDong[idx] = did;
+          cellSgg[idx] = sggId;
+          cellByKey.set((row << 10) | col, idx);
+
+          const prof = computePointProfile(x, y, did, 1.0);
+          cellTpIdx[idx] = TYPE_KEYS.indexOf(prof.tp);
+          cellG5[idx] = prof.g5;
+          cellAncName[idx] = prof.anc;
+          cellMix[idx] = prof.mix;
+          const off = idx * 24;
+          for (let h = 0; h < 24; h++) {
+            cellWd[off + h] = prof.wd[h];
+            cellWe[off + h] = prof.we[h];
+          }
+          cellAvgWd[idx] = prof.avgWd;
+          cellAvgWe[idx] = prof.avgWe;
+          idx++;
+        }
+      }
+    }
+    buildHexCells();
+
+    // Dynamic 385m H3 Micro-Cell LRU Cache (key = parentCellIdx -> array of 7 child micro-cell objects)
+    const microCache = new Map();
+    function getMicroChildren(parentIdx) {
+      let cached = microCache.get(parentIdx);
+      if (cached) return cached;
+      const px = cellX[parentIdx], py = cellY[parentIdx], did = cellDong[parentIdx];
+      const children = new Array(7);
+      for (let k = 0; k < 7; k++) {
+        const mx = px + MICRO_OFFSETS[k][0];
+        const my = py + MICRO_OFFSETS[k][1];
+        const prof = computePointProfile(mx, my, did, 1 / 7);
+        children[k] = {
+          parentIdx,
+          subIdx: k,
+          id: parentIdx * 7 + k,
+          x: mx,
+          y: my,
+          did,
+          sgg: cellSgg[parentIdx],
+          ...prof,
+        };
+      }
+      if (microCache.size > 1600) {
+        // Evict oldest 400 entries to keep memory minimal on smartphones
+        let n = 0;
+        for (const key of microCache.keys()) {
+          microCache.delete(key);
+          if (++n >= 400) break;
+        }
+      }
+      microCache.set(parentIdx, children);
+      return children;
+    }
+
     function recomputeAggregates() {
-      // SGG aggregates
       for (const s of SGGS) {
-        s.wd.fill(0);
-        s.we.fill(0);
+        s.wd.fill(0); s.we.fill(0);
         let g5Sum = 0, wSum = 0;
         const mixSum = [0, 0, 0, 0];
         const tpCount = {};
         for (const d of s.dongs) {
           let dAvg = 0;
           for (let h = 0; h < 24; h++) {
-            s.wd[h] += d.wd[h];
-            s.we[h] += d.we[h];
+            s.wd[h] += d.wd[h]; s.we[h] += d.we[h];
             dAvg += d.wd[h];
           }
           dAvg /= 24;
@@ -642,7 +930,6 @@
         s.typeLabel = (TYPE_LABELS[s.tp] || "복합") + " 중심";
       }
 
-      // Province totals per hour
       PROVINCE_TOTAL.wd = new Array(24).fill(0);
       PROVINCE_TOTAL.we = new Array(24).fill(0);
       for (const d of DONGS) {
@@ -657,28 +944,29 @@
     recomputeAggregates();
 
     // -----------------------------------------------------------------------
-    // 2. Application State
+    // 3. Application State & Smooth 15-Minute / 1-Hour Catmull-Rom Engine
     // -----------------------------------------------------------------------
     const state = {
       metric: "deltaPct", // 'deltaPct' | 'deltaAbs' | 'vsAvg' | 'volume'
       day: "wd",          // 'wd' | 'we'
-      level: "dong",      // 'dong' | 'sgg'
-      hour: 8.0,          // float [0, 24) for smooth playback
+      level: "cell",      // 'cell' | 'dong' | 'sgg'
+      timeStepMin: 15,    // 15 (96 slots) | 60 (24 slots)
+      hour: 8.25,         // 08:15 default (crisp morning rush!)
       playing: false,
       speed: 1.0,
-      rankTab: "surge",   // 'surge' | 'drop' | 'vol'
+      rankTab: "surge",
       layers: {
+        micro: true,
         pulse: true,
         highway: true,
         landmarks: false,
+        dongBorder: false,
         sggBorder: true,
       },
-      filterSgg: -1,      // -1 = all
-      hoveredId: -1,
-      selectedId: -1,
-      selectedLevel: "dong",
+      filterSgg: -1,
+      hovered: null,      // { kind: 'cell'|'micro'|'dong'|'sgg', id, parentIdx?, subIdx? }
+      selected: null,     // same shape
       customDataName: null,
-      // Camera (map coords -> screen coords: sx = wx * scale + ox)
       cam: { scale: 0.08, ox: 0, oy: 0 },
       camTarget: null,
       pulsePhase: 0,
@@ -697,44 +985,88 @@
       "저녁 상권·귀가", "저녁 주거지 회귀", "주말 저녁 피크", "야간 콘텐츠 피크", "심야 안정화", "자정 전환"
     ];
 
+    // Cyclic Catmull-Rom spline evaluation on 24-hour arrays for smooth, realistic 15-minute curves
+    function evalCurve24(arr, offset, hourFloat) {
+      const hWrap = ((hourFloat % 24) + 24) % 24;
+      const i1 = Math.floor(hWrap);
+      const t = hWrap - i1;
+      if (t < 1e-4) return arr[offset + i1];
+      const i0 = (i1 + 23) % 24;
+      const i2 = (i1 + 1) % 24;
+      const i3 = (i1 + 2) % 24;
+      const p0 = arr[offset + i0], p1 = arr[offset + i1], p2 = arr[offset + i2], p3 = arr[offset + i3];
+      const t2 = t * t, t3 = t2 * t;
+      const v = 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+      return v > 0.005 ? v : 0.005;
+    }
+
+    function getDeltaStepHours() {
+      return state.timeStepMin === 15 ? 0.25 : 1.0;
+    }
+
+    function getMetricsFromArray(arr, offset, avg, hourFloat) {
+      const dtH = getDeltaStepHours();
+      const cur = evalCurve24(arr, offset, hourFloat);
+      const prev = evalCurve24(arr, offset, hourFloat - dtH);
+      const deltaAbs = cur - prev;
+      const deltaPct = prev > 0.0005 ? (deltaAbs / prev) * 100 : 0;
+      const vsAvg = avg > 0.0005 ? ((cur - avg) / avg) * 100 : 0;
+      return { cur, prev, avg, deltaAbs, deltaPct, vsAvg };
+    }
+
+    function getRegionMetrics(item, hourFloat, dayKey) {
+      return getMetricsFromArray(item[dayKey], 0, dayKey === "wd" ? item.avgWd : item.avgWe, hourFloat);
+    }
+
+    function getCellMetrics(cIdx, hourFloat, dayKey) {
+      const arr = dayKey === "wd" ? cellWd : cellWe;
+      const avg = dayKey === "wd" ? cellAvgWd[cIdx] : cellAvgWe[cIdx];
+      return getMetricsFromArray(arr, cIdx * 24, avg, hourFloat);
+    }
+
+    function getMicroMetrics(mc, hourFloat, dayKey) {
+      return getMetricsFromArray(mc[dayKey], 0, dayKey === "wd" ? mc.avgWd : mc.avgWe, hourFloat);
+    }
+
+    function isMicroActive() {
+      if (state.level !== "cell" || !state.layers.micro) return false;
+      const w = mapStage.clientWidth || 800, h = mapStage.clientHeight || 600;
+      const zoomLevel = state.cam.scale / (Math.min(w, h) / MAP_H);
+      return zoomLevel >= 3.6;
+    }
+
     // -----------------------------------------------------------------------
-    // 3. Metric Calculations & Color Scales
+    // 4. Color Ramps & 40-Bucket Fast Batched Palette
     // -----------------------------------------------------------------------
     function isLightTheme() {
       if (document.documentElement.classList.contains("light")) return true;
       const bg = getComputedStyle(document.documentElement).getPropertyValue("--background").trim();
-      // Fallback luminance check if host doesn't add .light class
       const m = bg.match(/^#([0-9a-f]{6})$/i);
       if (m) {
         const v = parseInt(m[1], 16);
-        const lum = 0.299 * ((v >> 16) & 255) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255);
-        return lum > 135;
+        return (0.299 * ((v >> 16) & 255) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) > 135;
       }
       const rgb = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-      if (rgb) {
-        const lum = 0.299 * (+rgb[1]) + 0.587 * (+rgb[2]) + 0.114 * (+rgb[3]);
-        return lum > 135;
-      }
+      if (rgb) return (0.299 * (+rgb[1]) + 0.587 * (+rgb[2]) + 0.114 * (+rgb[3])) > 135;
       return false;
     }
 
-    function getInterpolatedVal(arr, hourFloat) {
-      const h0 = ((Math.floor(hourFloat) % 24) + 24) % 24;
-      const h1 = (h0 + 1) % 24;
-      const f = hourFloat - Math.floor(hourFloat);
-      return arr[h0] * (1 - f) + arr[h1] * f;
-    }
-
-    function getRegionMetrics(item, hourFloat, dayKey) {
-      const arr = item[dayKey];
-      const cur = getInterpolatedVal(arr, hourFloat);
-      const prev = getInterpolatedVal(arr, hourFloat - 1);
-      const avg = dayKey === "wd" ? item.avgWd : item.avgWe;
-      const deltaAbs = cur - prev;
-      const deltaPct = prev > 0.001 ? ((cur - prev) / prev) * 100 : 0;
-      const vsAvg = avg > 0.001 ? ((cur - avg) / avg) * 100 : 0;
-      return { cur, prev, avg, deltaAbs, deltaPct, vsAvg };
-    }
+    const DIV_LIGHT = [
+      [15, 76, 156], [56, 134, 212], [172, 212, 240], [235, 238, 242],
+      [253, 208, 152], [239, 108, 34], [172, 18, 28],
+    ];
+    const DIV_DARK = [
+      [24, 118, 218], [42, 157, 214], [38, 86, 122], [38, 45, 56],
+      [130, 74, 34], [234, 108, 26], [224, 46, 46],
+    ];
+    const SEQ_LIGHT = [
+      [245, 247, 242], [254, 235, 160], [253, 174, 97],
+      [244, 109, 67], [205, 38, 38], [122, 16, 28],
+    ];
+    const SEQ_DARK = [
+      [25, 34, 46], [24, 84, 108], [22, 148, 136],
+      [230, 178, 44], [239, 104, 36], [224, 42, 42],
+    ];
 
     function lerpRgb(c1, c2, t) {
       const k = Math.max(0, Math.min(1, t));
@@ -748,51 +1080,20 @@
       return lerpRgb(stops[idx], stops[idx + 1], scaled - idx);
     }
 
-    // Colorblind-friendly cartographic ramps (NO purple!)
-    const DIV_LIGHT = [
-      [15, 76, 156],   // strong drop (deep blue)
-      [56, 134, 212],  // moderate drop (sky blue)
-      [172, 212, 240], // mild drop (ice blue)
-      [235, 238, 242], // neutral (warm pale gray)
-      [253, 208, 152], // mild surge (peach)
-      [239, 108, 34],  // moderate surge (vermilion)
-      [172, 18, 28],   // strong surge (deep crimson)
-    ];
-    const DIV_DARK = [
-      [24, 118, 218],  // strong drop (bright cobalt)
-      [42, 157, 214],  // moderate drop (cyan-blue)
-      [38, 86, 122],   // mild drop (muted slate-blue)
-      [38, 45, 56],    // neutral (dark charcoal)
-      [130, 74, 34],   // mild surge (muted amber)
-      [234, 108, 26],  // moderate surge (vivid orange)
-      [224, 46, 46],   // strong surge (bright crimson)
-    ];
-    const SEQ_LIGHT = [
-      [245, 247, 242],
-      [254, 235, 160],
-      [253, 174, 97],
-      [244, 109, 67],
-      [205, 38, 38],
-      [122, 16, 28],
-    ];
-    const SEQ_DARK = [
-      [25, 34, 46],
-      [24, 84, 108],
-      [22, 148, 136],
-      [230, 178, 44],
-      [239, 104, 36],
-      [224, 42, 42],
-    ];
-
-    function getMetricDomain() {
-      if (state.metric === "deltaPct") return { min: -40, max: 40, diverging: true, unit: "%" };
+    function getMetricDomain(forceMicro = false) {
+      const is15 = state.timeStepMin === 15;
+      const micro = forceMicro || isMicroActive();
+      if (state.metric === "deltaPct") {
+        const cap = is15 ? 8 : 40;
+        return { min: -cap, max: cap, diverging: true, unit: "%" };
+      }
       if (state.metric === "deltaAbs") {
-        const cap = state.level === "sgg" ? 60 : 8;
-        return { min: -cap, max: cap, diverging: true, unit: " Gbps" };
+        let cap = state.level === "sgg" ? 60 : state.level === "dong" ? 8 : (micro ? 0.28 : 1.8);
+        if (is15) cap *= 0.35;
+        return { min: -cap, max: cap, diverging: true, unit: cap < 1 ? " Gbps" : " Gbps" };
       }
       if (state.metric === "vsAvg") return { min: -75, max: 75, diverging: true, unit: "%" };
-      // volume
-      const cap = state.level === "sgg" ? 550 : 36;
+      const cap = state.level === "sgg" ? 550 : state.level === "dong" ? 36 : (micro ? 1.4 : 8.5);
       return { min: 0, max: cap, diverging: false, unit: " Gbps" };
     }
 
@@ -803,30 +1104,64 @@
       return m.cur;
     }
 
-    function colorForValue(val, domain, light) {
-      if (domain.diverging) {
-        const norm = (val - domain.min) / (domain.max - domain.min);
-        return sampleStops(light ? DIV_LIGHT : DIV_DARK, norm);
-      } else {
-        // Gentle sqrt scaling for absolute traffic so mid-tier dongs stay legible
-        const ratio = Math.max(0, Math.min(1, val / domain.max));
-        return sampleStops(light ? SEQ_LIGHT : SEQ_DARK, Math.pow(ratio, 0.72));
+    const BUCKET_N = 40;
+    function getBucketPalette(domain, light) {
+      const stops = domain.diverging ? (light ? DIV_LIGHT : DIV_DARK) : (light ? SEQ_LIGHT : SEQ_DARK);
+      const pal = new Array(BUCKET_N);
+      for (let i = 0; i < BUCKET_N; i++) {
+        pal[i] = sampleStops(stops, i / (BUCKET_N - 1));
       }
+      return pal;
+    }
+
+    function bucketIndex(val, domain) {
+      let norm;
+      if (domain.diverging) {
+        norm = (val - domain.min) / (domain.max - domain.min);
+      } else {
+        norm = Math.pow(Math.max(0, Math.min(1, val / domain.max)), 0.70);
+      }
+      const bi = Math.floor(Math.max(0, Math.min(0.9999, norm)) * BUCKET_N);
+      return bi;
+    }
+
+    function colorForValue(val, domain, light) {
+      const stops = domain.diverging ? (light ? DIV_LIGHT : DIV_DARK) : (light ? SEQ_LIGHT : SEQ_DARK);
+      if (domain.diverging) return sampleStops(stops, (val - domain.min) / (domain.max - domain.min));
+      return sampleStops(stops, Math.pow(Math.max(0, Math.min(1, val / domain.max)), 0.70));
     }
 
     function formatSigned(val, decimals = 1, suffix = "") {
-      const sign = val > 0.005 ? "+" : "";
+      const sign = val > 0.0005 ? "+" : "";
       return `${sign}${val.toFixed(decimals)}${suffix}`;
     }
 
+    function formatTraffic(gbps) {
+      if (gbps < 1.0) return `${Math.round(gbps * 1000)} Mbps`;
+      return `${gbps.toFixed(2)} Gbps`;
+    }
+
+    function formatDeltaTraffic(dg) {
+      if (Math.abs(dg) < 0.8) return `${dg >= 0 ? "+" : ""}${Math.round(dg * 1000)}M`;
+      return `${formatSigned(dg, 2)}G`;
+    }
+
     function deltaColorClass(val) {
-      if (val >= 2) return "text-[#ea580c]";
-      if (val <= -2) return "text-[#2563eb]";
+      const th = state.timeStepMin === 15 ? 0.6 : 2.0;
+      if (val >= th) return "text-[#ea580c]";
+      if (val <= -th) return "text-[#2563eb]";
       return "text-[var(--muted-foreground)]";
     }
 
+    function formatClock(hourFloat) {
+      const totalMin = Math.round((((hourFloat % 24) + 24) % 24) * 60) % (24 * 60);
+      const hh = Math.floor(totalMin / 60);
+      const mm = totalMin % 60;
+      return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+    }
+
     // -----------------------------------------------------------------------
-    // 4. Canvas Map Renderer & Camera Control
+    // 5. Canvas Map Renderer & Camera Control (60 FPS Color-Bucketed Hexes!)
     // -----------------------------------------------------------------------
     const mapStage = document.getElementById("mapStage");
     const mapCanvas = document.getElementById("mapCanvas");
@@ -835,24 +1170,19 @@
     function fitCameraToBBox(bbox, animate = false, padRatio = 0.07) {
       const w = mapStage.clientWidth || 800;
       const h = mapStage.clientHeight || 600;
-      const bw = Math.max(100, bbox[2] - bbox[0]);
-      const bh = Math.max(100, bbox[3] - bbox[1]);
-      const padX = w * padRatio;
-      const padY = h * padRatio;
+      const bw = Math.max(80, bbox[2] - bbox[0]);
+      const bh = Math.max(80, bbox[3] - bbox[1]);
+      const padX = w * padRatio, padY = h * padRatio;
       const scale = Math.min((w - padX * 2) / bw, (h - padY * 2) / bh);
       const cx = (bbox[0] + bbox[2]) * 0.5;
       const cy = (bbox[1] + bbox[3]) * 0.5;
       const target = {
-        scale: Math.max(0.03, Math.min(2.2, scale)),
+        scale: Math.max(0.03, Math.min(3.5, scale)),
         ox: w * 0.5 - cx * scale,
         oy: h * 0.5 - cy * scale,
       };
-      if (animate) {
-        state.camTarget = target;
-      } else {
-        state.cam = target;
-        state.camTarget = null;
-      }
+      if (animate) state.camTarget = target;
+      else { state.cam = target; state.camTarget = null; }
     }
 
     function resetCamera(animate = true) {
@@ -860,32 +1190,47 @@
     }
 
     function screenToWorld(sx, sy) {
-      return [
-        (sx - state.cam.ox) / state.cam.scale,
-        (sy - state.cam.oy) / state.cam.scale,
-      ];
+      return [(sx - state.cam.ox) / state.cam.scale, (sy - state.cam.oy) / state.cam.scale];
     }
 
     function worldToScreen(wx, wy) {
-      return [
-        wx * state.cam.scale + state.cam.ox,
-        wy * state.cam.scale + state.cam.oy,
-      ];
+      return [wx * state.cam.scale + state.cam.ox, wy * state.cam.scale + state.cam.oy];
     }
 
+    let lastMicroState = false;
     function updateScaleBar() {
-      // Compute nice km length near 70px
-      const targetPx = 72;
+      const targetPx = 68;
       const kmPerPx = KM_PER_UNIT / state.cam.scale;
       const rawKm = targetPx * kmPerPx;
-      const steps = [0.5, 1, 2, 5, 10, 20, 30, 50];
+      const steps = [0.2, 0.5, 1, 2, 5, 10, 20, 30, 50];
       let best = steps[0];
-      for (const s of steps) {
-        if (Math.abs(s - rawKm) < Math.abs(best - rawKm)) best = s;
-      }
-      const px = Math.max(24, Math.min(120, Math.round(best / kmPerPx)));
+      for (const s of steps) if (Math.abs(s - rawKm) < Math.abs(best - rawKm)) best = s;
+      const px = Math.max(24, Math.min(115, Math.round(best / kmPerPx)));
       document.getElementById("scaleBarLine").style.width = px + "px";
-      document.getElementById("scaleBarLabel").textContent = best < 1 ? `${best * 1000} m` : `${best} km`;
+      document.getElementById("scaleBarLabel").textContent = best < 1 ? `${Math.round(best * 1000)} m` : `${best} km`;
+
+      const microNow = isMicroActive();
+      const badge = document.getElementById("resBadge");
+      if (state.level === "cell") {
+        if (microNow) {
+          badge.textContent = "385 m 초미세 셀 · 79K 해상도";
+          badge.style.borderColor = "var(--primary)";
+        } else {
+          badge.textContent = `1.0 km 셀 · ${HEX_COUNT.toLocaleString()}개`;
+          badge.style.borderColor = "";
+        }
+      } else if (state.level === "dong") {
+        badge.textContent = "행정동 · 602개";
+        badge.style.borderColor = "";
+      } else {
+        badge.textContent = "시·군·구 · 47개";
+        badge.style.borderColor = "";
+      }
+
+      if (microNow !== lastMicroState) {
+        lastMicroState = microNow;
+        updateLegend();
+      }
     }
 
     function updateLegend() {
@@ -895,30 +1240,36 @@
       const grad = stops.map((c, i) => `rgb(${c[0]},${c[1]},${c[2]}) ${(i / (stops.length - 1) * 100).toFixed(0)}%`).join(", ");
       document.getElementById("legendRamp").style.background = `linear-gradient(to right, ${grad})`;
 
+      const stepTag = state.timeStepMin === 15 ? "15분 전" : "1시간 전";
+      const subTag = state.timeStepMin === 15 ? "t vs t-15m" : "t vs t-1h";
+      const lvlName = state.level === "sgg" ? "시·군·구" : state.level === "dong" ? "행정동" : (isMicroActive() ? "385m 셀" : "1km 셀");
+
       const titles = {
-        deltaPct: ["전시간 대비 변화율 (Δ%)", "t vs t-1h"],
-        deltaAbs: ["전시간 대비 변화량 (Δ Gbps)", "t vs t-1h"],
-        vsAvg: ["일평균 대비 트래픽 편차 (%)", "t vs 24h 평균"],
-        volume: ["현재 시각 총 트래픽 (Gbps)", state.level === "sgg" ? "시·군·구 합계" : "행정동별 규모"],
+        deltaPct: [`${stepTag} 대비 변화율 (Δ%)`, subTag],
+        deltaAbs: [`${stepTag} 대비 변화량 (Δ)`, subTag],
+        vsAvg: ["일평균 대비 편차 (%)", "t vs 24h 평균"],
+        volume: [`현재 총 트래픽 (${lvlName})`, "Gbps"],
       };
       document.getElementById("legendTitle").textContent = titles[state.metric][0];
       document.getElementById("legendSub").textContent = titles[state.metric][1];
 
       const ticksEl = document.getElementById("legendTicks");
       if (domain.diverging) {
-        const half = domain.max / 2;
-        const u = domain.unit;
-        ticksEl.innerHTML = `<span>${domain.min}${u}</span><span>-${half}${u}</span><span>0</span><span>+${half}${u}</span><span>+${domain.max}${u}+</span>`;
+        const m = domain.max;
+        const half = m / 2;
+        const fmt = (v) => (Math.abs(v) < 1 && v !== 0 ? v.toFixed(2) : Math.abs(v) < 10 && !Number.isInteger(v) ? v.toFixed(1) : String(Math.round(v)));
+        const u = domain.unit === "%" ? "%" : "";
+        ticksEl.innerHTML = `<span>-${fmt(m)}${u}</span><span>-${fmt(half)}${u}</span><span>0</span><span>+${fmt(half)}${u}</span><span>+${fmt(m)}${u}+</span>`;
       } else {
         const m = domain.max;
-        ticksEl.innerHTML = `<span>0</span><span>${Math.round(m * 0.25)}</span><span>${Math.round(m * 0.5)}</span><span>${Math.round(m * 0.75)}</span><span>${m}+ Gbps</span>`;
+        const fmt = (v) => (m < 10 ? v.toFixed(1) : String(Math.round(v)));
+        ticksEl.innerHTML = `<span>0</span><span>${fmt(m * 0.25)}</span><span>${fmt(m * 0.5)}</span><span>${fmt(m * 0.75)}</span><span>${fmt(m)}+G</span>`;
       }
     }
 
     function resizeCanvas() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = mapStage.clientWidth;
-      const h = mapStage.clientHeight;
+      const w = mapStage.clientWidth, h = mapStage.clientHeight;
       if (w === 0 || h === 0) return;
       mapCanvas.width = Math.round(w * dpr);
       mapCanvas.height = Math.round(h * dpr);
@@ -926,17 +1277,25 @@
       renderMap();
     }
 
+    function drawHexAt(cx, cy, verts) {
+      ctx.moveTo(cx + verts[0], cy + verts[1]);
+      ctx.lineTo(cx + verts[2], cy + verts[3]);
+      ctx.lineTo(cx + verts[4], cy + verts[5]);
+      ctx.lineTo(cx + verts[6], cy + verts[7]);
+      ctx.lineTo(cx + verts[8], cy + verts[9]);
+      ctx.lineTo(cx + verts[10], cy + verts[11]);
+      ctx.closePath();
+    }
+
     function renderMap() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = mapStage.clientWidth;
-      const h = mapStage.clientHeight;
+      const w = mapStage.clientWidth, h = mapStage.clientHeight;
       if (w === 0 || h === 0) return;
 
       const light = isLightTheme();
       const cs = getComputedStyle(document.documentElement);
       const bgColor = cs.getPropertyValue("--background").trim() || (light ? "#f4f6f9" : "#0f141b");
       const fgColor = cs.getPropertyValue("--foreground").trim() || (light ? "#111827" : "#e6edf3");
-      const mutedColor = cs.getPropertyValue("--muted-foreground").trim() || (light ? "#64748b" : "#94a3b8");
 
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -944,59 +1303,174 @@
       ctx.fillRect(0, 0, w, h);
 
       const { scale, ox, oy } = state.cam;
-      const viewMinX = -ox / scale;
-      const viewMinY = -oy / scale;
-      const viewMaxX = (w - ox) / scale;
-      const viewMaxY = (h - oy) / scale;
+      const viewMinX = -ox / scale - HEX_R * 2;
+      const viewMinY = -oy / scale - HEX_R * 2;
+      const viewMaxX = (w - ox) / scale + HEX_R * 2;
+      const viewMaxY = (h - oy) / scale + HEX_R * 2;
 
       ctx.setTransform(scale * dpr, 0, 0, scale * dpr, ox * dpr, oy * dpr);
 
-      // 1) Seoul & Incheon Geographic Context Silhouettes
+      // 1) Seoul & Incheon Silhouettes
       ctx.fillStyle = light ? "rgba(148, 163, 184, 0.16)" : "rgba(148, 163, 184, 0.08)";
       ctx.strokeStyle = light ? "rgba(100, 116, 139, 0.34)" : "rgba(148, 163, 184, 0.22)";
       ctx.lineWidth = 1.0 / scale;
       ctx.setLineDash([4 / scale, 3 / scale]);
-      ctx.fill(SEOUL_PATH);
-      ctx.stroke(SEOUL_PATH);
-      ctx.fill(INCHEON_PATH);
-      ctx.stroke(INCHEON_PATH);
+      ctx.fill(SEOUL_PATH); ctx.stroke(SEOUL_PATH);
+      ctx.fill(INCHEON_PATH); ctx.stroke(INCHEON_PATH);
       ctx.setLineDash([]);
 
-      // 2) Draw Choropleth Polygons (602 Dongs OR 47 SGGs)
       const domain = getMetricDomain();
-      const items = state.level === "dong" ? DONGS : SGGS;
-      const strokeBase = light ? "rgba(15, 23, 42, 0.20)" : "rgba(255, 255, 255, 0.14)";
-      ctx.lineWidth = (state.level === "dong" ? 0.55 : 1.1) / scale;
-      ctx.lineJoin = "round";
-
+      const zoomLevel = scale / (Math.min(w, h) / MAP_H);
       const topMovers = [];
+      const pulseThreshold = state.timeStepMin === 15 ? 4.8 : 14.0;
 
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const b = item.bbox;
-        // Viewport culling
-        if (b[2] < viewMinX || b[0] > viewMaxX || b[3] < viewMinY || b[1] > viewMaxY) continue;
+      // 2) Render Active Spatial Layer
+      if (state.level === "cell") {
+        const pal = getBucketPalette(domain, light);
+        const microMode = isMicroActive();
+        const buckets = new Array(BUCKET_N);
+        const dimBuckets = state.filterSgg !== -1 ? new Array(BUCKET_N) : null;
+        for (let b = 0; b < BUCKET_N; b++) {
+          buckets[b] = [];
+          if (dimBuckets) dimBuckets[b] = [];
+        }
 
-        const m = getRegionMetrics(item, state.hour, state.day);
-        const val = getMetricValue(m);
-        const dimmed = state.filterSgg !== -1 && (state.level === "dong" ? item.s !== state.filterSgg : item.id !== state.filterSgg);
+        if (microMode) {
+          // Render H3 Aperture-7 385m micro-cells for visible parent 1km hexes!
+          for (let i = 0; i < HEX_COUNT; i++) {
+            const px = cellX[i], py = cellY[i];
+            if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
+            const dimmed = state.filterSgg !== -1 && cellSgg[i] !== state.filterSgg;
+            const children = getMicroChildren(i);
+            for (let k = 0; k < 7; k++) {
+              const mc = children[k];
+              const m = getMicroMetrics(mc, state.hour, state.day);
+              const bi = bucketIndex(getMetricValue(m), domain);
+              (dimmed ? dimBuckets[bi] : buckets[bi]).push(mc.x, mc.y);
+              if (!dimmed && Math.abs(m.deltaPct) >= pulseThreshold) {
+                topMovers.push({ cx: mc.x, cy: mc.y, deltaPct: m.deltaPct, absPct: Math.abs(m.deltaPct) });
+              }
+            }
+          }
+          // Batched fill (40 calls max!)
+          for (let b = 0; b < BUCKET_N; b++) {
+            const arr = buckets[b];
+            if (arr.length) {
+              ctx.beginPath();
+              for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], MICRO_VERTS);
+              ctx.fillStyle = pal[b];
+              ctx.fill();
+            }
+          }
+          if (dimBuckets) {
+            ctx.globalAlpha = 0.22;
+            for (let b = 0; b < BUCKET_N; b++) {
+              const arr = dimBuckets[b];
+              if (arr.length) {
+                ctx.beginPath();
+                for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], MICRO_VERTS);
+                ctx.fillStyle = pal[b];
+                ctx.fill();
+              }
+            }
+            ctx.globalAlpha = 1.0;
+          }
+          // Crisp micro-hex grid lines
+          ctx.beginPath();
+          for (let b = 0; b < BUCKET_N; b++) {
+            const arr = buckets[b];
+            for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], MICRO_VERTS);
+          }
+          ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.14)" : "rgba(255, 255, 255, 0.10)";
+          ctx.lineWidth = 0.5 / scale;
+          ctx.stroke();
+        } else {
+          // Render 11,286 1km hex cells via 40-bucket batching (< 2ms!)
+          for (let i = 0; i < HEX_COUNT; i++) {
+            const px = cellX[i], py = cellY[i];
+            if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
+            const m = getCellMetrics(i, state.hour, state.day);
+            const bi = bucketIndex(getMetricValue(m), domain);
+            const dimmed = state.filterSgg !== -1 && cellSgg[i] !== state.filterSgg;
+            (dimmed ? dimBuckets[bi] : buckets[bi]).push(px, py);
+            if (!dimmed && Math.abs(m.deltaPct) >= pulseThreshold) {
+              topMovers.push({ cx: px, cy: py, deltaPct: m.deltaPct, absPct: Math.abs(m.deltaPct) });
+            }
+          }
+          for (let b = 0; b < BUCKET_N; b++) {
+            const arr = buckets[b];
+            if (arr.length) {
+              ctx.beginPath();
+              for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], HEX_VERTS);
+              ctx.fillStyle = pal[b];
+              ctx.fill();
+            }
+          }
+          if (dimBuckets) {
+            ctx.globalAlpha = 0.22;
+            for (let b = 0; b < BUCKET_N; b++) {
+              const arr = dimBuckets[b];
+              if (arr.length) {
+                ctx.beginPath();
+                for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], HEX_VERTS);
+                ctx.fillStyle = pal[b];
+                ctx.fill();
+              }
+            }
+            ctx.globalAlpha = 1.0;
+          }
+          // Subtle hex cell borders when zoomed in enough
+          if (zoomLevel >= 1.55) {
+            ctx.beginPath();
+            for (let b = 0; b < BUCKET_N; b++) {
+              const arr = buckets[b];
+              for (let j = 0; j < arr.length; j += 2) drawHexAt(arr[j], arr[j + 1], HEX_VERTS);
+            }
+            ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.14)" : "rgba(255, 255, 255, 0.10)";
+            ctx.lineWidth = 0.45 / scale;
+            ctx.stroke();
+          }
+        }
+      } else {
+        // Classic 602 행정동 or 47 시군구 Choropleth
+        const items = state.level === "dong" ? DONGS : SGGS;
+        const strokeBase = light ? "rgba(15, 23, 42, 0.20)" : "rgba(255, 255, 255, 0.14)";
+        ctx.lineWidth = (state.level === "dong" ? 0.55 : 1.1) / scale;
+        ctx.lineJoin = "round";
 
-        ctx.fillStyle = colorForValue(val, domain, light);
-        ctx.globalAlpha = dimmed ? 0.22 : 1.0;
-        ctx.fill(item.path);
-        ctx.strokeStyle = strokeBase;
-        ctx.stroke(item.path);
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const b = item.bbox;
+          if (b[2] < viewMinX || b[0] > viewMaxX || b[3] < viewMinY || b[1] > viewMaxY) continue;
+          const m = getRegionMetrics(item, state.hour, state.day);
+          const dimmed = state.filterSgg !== -1 && (state.level === "dong" ? item.s !== state.filterSgg : item.id !== state.filterSgg);
+          ctx.fillStyle = colorForValue(getMetricValue(m), domain, light);
+          ctx.globalAlpha = dimmed ? 0.22 : 1.0;
+          ctx.fill(item.path);
+          ctx.strokeStyle = strokeBase;
+          ctx.stroke(item.path);
+          if (!dimmed && Math.abs(m.deltaPct) >= pulseThreshold) {
+            topMovers.push({ cx: item.cx, cy: item.cy, deltaPct: m.deltaPct, absPct: Math.abs(m.deltaPct) });
+          }
+        }
+        ctx.globalAlpha = 1.0;
+      }
 
-        if (!dimmed && Math.abs(m.deltaPct) >= 14) {
-          topMovers.push({ item, m, absPct: Math.abs(m.deltaPct) });
+      // 3) Optional 602 행정동 Boundaries Overlay (when in cell mode)
+      if (state.level === "cell" && (state.layers.dongBorder || zoomLevel >= 2.8)) {
+        ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.34)" : "rgba(226, 232, 240, 0.26)";
+        ctx.lineWidth = 0.85 / scale;
+        for (const d of DONGS) {
+          const b = d.bbox;
+          if (b[2] < viewMinX || b[0] > viewMaxX || b[3] < viewMinY || b[1] > viewMaxY) continue;
+          ctx.stroke(d.path);
         }
       }
-      ctx.globalAlpha = 1.0;
 
-      // 3) 47 SGG Boundary Emphasis (when in dong mode)
-      if (state.level === "dong" && state.layers.sggBorder) {
-        ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.45)" : "rgba(226, 232, 240, 0.34)";
-        ctx.lineWidth = 1.15 / scale;
+      // 4) 47 SGG Boundary Emphasis
+      if (state.level !== "sgg" && state.layers.sggBorder) {
+        ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.48)" : "rgba(226, 232, 240, 0.36)";
+        ctx.lineWidth = 1.2 / scale;
         for (const s of SGGS) {
           const b = s.bbox;
           if (b[2] < viewMinX || b[0] > viewMaxX || b[3] < viewMinY || b[1] > viewMaxY) continue;
@@ -1004,57 +1478,80 @@
         }
       }
 
-      // 4) Major Highways Overlay
+      // 5) Major Highways Overlay
       if (state.layers.highway) {
         ctx.save();
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        // Outer halo
-        ctx.strokeStyle = light ? "rgba(255,255,255,0.65)" : "rgba(15,20,27,0.65)";
-        ctx.lineWidth = 3.2 / scale;
+        ctx.strokeStyle = light ? "rgba(255,255,255,0.62)" : "rgba(15,20,27,0.62)";
+        ctx.lineWidth = 3.0 / scale;
         for (const hw of BUNDLE.highways) {
           ctx.beginPath();
           for (let i = 0; i < hw.pts.length; i += 2) {
-            if (i === 0) ctx.moveTo(hw.pts[i], hw.pts[i + 1]);
-            else ctx.lineTo(hw.pts[i], hw.pts[i + 1]);
+            if (i === 0) ctx.moveTo(hw.pts[i], hw.pts[i + 1]); else ctx.lineTo(hw.pts[i], hw.pts[i + 1]);
           }
           ctx.stroke();
         }
-        // Core line
-        ctx.strokeStyle = light ? "rgba(217, 119, 6, 0.72)" : "rgba(251, 191, 36, 0.65)";
-        ctx.lineWidth = 1.5 / scale;
+        ctx.strokeStyle = light ? "rgba(217, 119, 6, 0.78)" : "rgba(251, 191, 36, 0.70)";
+        ctx.lineWidth = 1.4 / scale;
         for (const hw of BUNDLE.highways) {
           ctx.beginPath();
           for (let i = 0; i < hw.pts.length; i += 2) {
-            if (i === 0) ctx.moveTo(hw.pts[i], hw.pts[i + 1]);
-            else ctx.lineTo(hw.pts[i], hw.pts[i + 1]);
+            if (i === 0) ctx.moveTo(hw.pts[i], hw.pts[i + 1]); else ctx.lineTo(hw.pts[i], hw.pts[i + 1]);
           }
           ctx.stroke();
         }
         ctx.restore();
       }
 
-      // 5) Hovered & Selected Region Crisp Outlines
-      if (state.hoveredId !== -1 && state.hoveredId < items.length) {
-        const hv = items[state.hoveredId];
-        ctx.strokeStyle = light ? "#0f172a" : "#f8fafc";
-        ctx.lineWidth = 2.0 / scale;
-        ctx.stroke(hv.path);
+      // 6) Hovered & Selected Outlines
+      function strokeTarget(tgt, isSel) {
+        if (!tgt) return;
+        ctx.beginPath();
+        if (tgt.kind === "cell") {
+          drawHexAt(cellX[tgt.id], cellY[tgt.id], HEX_VERTS);
+        } else if (tgt.kind === "micro") {
+          const ch = getMicroChildren(tgt.parentIdx)[tgt.subIdx];
+          drawHexAt(ch.x, ch.y, MICRO_VERTS);
+        } else if (tgt.kind === "dong") {
+          if (isSel) {
+            ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
+            ctx.lineWidth = 4.2 / scale; ctx.stroke(DONGS[tgt.id].path);
+            ctx.strokeStyle = light ? "#111827" : "#facc15";
+            ctx.lineWidth = 2.4 / scale; ctx.stroke(DONGS[tgt.id].path);
+          } else {
+            ctx.strokeStyle = light ? "#0f172a" : "#f8fafc";
+            ctx.lineWidth = 2.0 / scale; ctx.stroke(DONGS[tgt.id].path);
+          }
+          return;
+        } else if (tgt.kind === "sgg") {
+          if (isSel) {
+            ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
+            ctx.lineWidth = 4.2 / scale; ctx.stroke(SGGS[tgt.id].path);
+            ctx.strokeStyle = light ? "#111827" : "#facc15";
+            ctx.lineWidth = 2.4 / scale; ctx.stroke(SGGS[tgt.id].path);
+          } else {
+            ctx.strokeStyle = light ? "#0f172a" : "#f8fafc";
+            ctx.lineWidth = 2.0 / scale; ctx.stroke(SGGS[tgt.id].path);
+          }
+          return;
+        }
+        if (isSel) {
+          ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
+          ctx.lineWidth = 4.0 / scale; ctx.stroke();
+          ctx.strokeStyle = light ? "#111827" : "#facc15";
+          ctx.lineWidth = 2.2 / scale; ctx.stroke();
+        } else {
+          ctx.strokeStyle = light ? "#0f172a" : "#f8fafc";
+          ctx.lineWidth = 1.8 / scale; ctx.stroke();
+        }
       }
-      if (state.selectedId !== -1 && state.selectedLevel === state.level && state.selectedId < items.length) {
-        const sel = items[state.selectedId];
-        ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
-        ctx.lineWidth = 4.2 / scale;
-        ctx.stroke(sel.path);
-        ctx.strokeStyle = light ? "#111827" : "#facc15";
-        ctx.lineWidth = 2.4 / scale;
-        ctx.stroke(sel.path);
-      }
+      strokeTarget(state.hovered, false);
+      strokeTarget(state.selected, true);
 
-      // --- Switch to Screen Space for Sharp Labels, Pulses, and Landmark Pins ---
+      // --- Screen Space: Context Labels, Pulses, Landmarks, Zoom-Adaptive Region Labels ---
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // 6) Seoul / Incheon Context Labels
       ctx.font = "600 12px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -1064,20 +1561,26 @@
       const [ilx, ily] = worldToScreen(BUNDLE.meta.incheonLabel[0], BUNDLE.meta.incheonLabel[1]);
       if (ilx > 0 && ilx < w && ily > 0 && ily < h) ctx.fillText("인천광역시", ilx, ily);
 
-      // 7) Surge / Drop Animated Pulse Rings on Top Movers
+      // 7) Surge / Drop Animated Pulse Rings (Spatially de-clustered so clusters don't stack)
       if (state.layers.pulse && topMovers.length > 0) {
         topMovers.sort((a, b) => b.absPct - a.absPct);
         const cap = state.level === "sgg" ? 8 : 14;
         const pulse = (Math.sin(state.pulsePhase) + 1) * 0.5;
-        for (let i = 0; i < Math.min(cap, topMovers.length); i++) {
-          const { item, m } = topMovers[i];
-          const [sx, sy] = worldToScreen(item.cx, item.cy);
+        const placedPulses = [];
+        for (let i = 0; i < topMovers.length && placedPulses.length < cap; i++) {
+          const mv = topMovers[i];
+          const [sx, sy] = worldToScreen(mv.cx, mv.cy);
           if (sx < -20 || sx > w + 20 || sy < -20 || sy > h + 20) continue;
-          const isSurge = m.deltaPct >= 0;
-          const rgb = isSurge ? "239, 68, 68" : "37, 99, 235";
-          const rBase = 4 + Math.min(5, Math.abs(m.deltaPct) / 9);
-          const rRing = rBase + pulse * 9;
+          let tooClose = false;
+          for (const pp of placedPulses) {
+            if (Math.hypot(sx - pp[0], sy - pp[1]) < 26) { tooClose = true; break; }
+          }
+          if (tooClose) continue;
+          placedPulses.push([sx, sy]);
 
+          const isSurge = mv.deltaPct >= 0;
+          const rgb = isSurge ? "239, 68, 68" : "37, 99, 235";
+          const rRing = 5 + pulse * 9;
           ctx.beginPath();
           ctx.arc(sx, sy, rRing, 0, Math.PI * 2);
           ctx.strokeStyle = `rgba(${rgb}, ${(0.72 * (1 - pulse)).toFixed(2)})`;
@@ -1085,7 +1588,7 @@
           ctx.stroke();
 
           ctx.beginPath();
-          ctx.arc(sx, sy, 3.2, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 3.0, 0, Math.PI * 2);
           ctx.fillStyle = `rgb(${rgb})`;
           ctx.fill();
           ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
@@ -1094,11 +1597,10 @@
         }
       }
 
-      // 8) Zoom-Adaptive Region Labels & Optional Landmark Pins (collision-avoided)
-      const zoomLevel = scale / (Math.min(w, h) / MAP_H);
+      // 8) Collision-Avoided Landmark Pins & Zoom-Adaptive Labels
       const placedBoxes = [];
       function canPlace(x, y, bw, bh, force = false) {
-        if (!force && (x - bw / 2 < 8 || x + bw / 2 > w - 8 || y - bh / 2 < 46 || y + bh / 2 > h - 46)) return false;
+        if (!force && (x - bw / 2 < 8 || x + bw / 2 > w - 8 || y - bh / 2 < 48 || y + bh / 2 > h - 48)) return false;
         if (!force) {
           for (const p of placedBoxes) {
             if (Math.abs(x - p[0]) < (bw + p[2]) * 0.52 && Math.abs(y - p[1]) < (bh + p[3]) * 0.58) return false;
@@ -1108,40 +1610,34 @@
         return true;
       }
 
-      // 8a) Optional Key Landmarks Pins (placed first when enabled so badges stay clean & non-overlapping)
-      if (state.layers.landmarks) {
+      // 8a) Landmarks (or show close-up sub-anchors automatically when zoomed into 385m micro-cell mode!)
+      if (state.layers.landmarks || (state.level === "cell" && zoomLevel >= 4.2)) {
+        const list = (state.level === "cell" && zoomLevel >= 4.2)
+          ? ANCHORS.map((a) => ({ name: a[5], x: a[0], y: a[1], tp: TYPE_KEYS[a[2]] }))
+          : BUNDLE.landmarks;
         ctx.font = "600 11px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
-        for (const lm of BUNDLE.landmarks) {
+        for (const lm of list) {
           const [sx, sy] = worldToScreen(lm.x, lm.y);
-          if (sx < 10 || sx > w - 10 || sy < 44 || sy > h - 44) continue;
+          if (sx < 12 || sx > w - 12 || sy < 46 || sy > h - 46) continue;
           const pinColor = lm.tp === "biz" ? "#ea580c" : lm.tp === "ind" ? "#0284c7" : lm.tp === "tour" ? "#16a34a" : "#d97706";
-          ctx.beginPath();
-          ctx.arc(sx, sy, 4.0, 0, Math.PI * 2);
-          ctx.fillStyle = pinColor;
-          ctx.fill();
-          ctx.strokeStyle = light ? "#ffffff" : "#0f141b";
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-
           const tw = ctx.measureText(lm.name).width + 10;
-          const by = sy - 14;
+          const by = sy - 13;
           if (!canPlace(sx, by, tw + 4, 18)) continue;
-          const bx = sx - tw / 2;
-          ctx.fillStyle = light ? "rgba(255,255,255,0.93)" : "rgba(22,29,39,0.93)";
-          ctx.strokeStyle = pinColor;
-          ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.roundRect(bx, by - 8, tw, 16, 4);
-          ctx.fill();
-          ctx.stroke();
+          ctx.arc(sx, sy, 3.6, 0, Math.PI * 2);
+          ctx.fillStyle = pinColor; ctx.fill();
+          ctx.strokeStyle = light ? "#ffffff" : "#0f141b"; ctx.lineWidth = 1.4; ctx.stroke();
+
+          ctx.fillStyle = light ? "rgba(255,255,255,0.92)" : "rgba(22,29,39,0.92)";
+          ctx.strokeStyle = pinColor; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.roundRect(sx - tw / 2, by - 8, tw, 16, 4); ctx.fill(); ctx.stroke();
           ctx.fillStyle = fgColor;
           ctx.fillText(lm.name, sx, by + 0.5);
         }
       }
 
       // 8b) Region Labels
-      if (state.level === "dong" && zoomLevel >= 2.15) {
-        // Show individual 읍·면·동 names + live change (always prioritize selected dong)
+      if (state.level !== "sgg" && zoomLevel >= 2.15) {
         ctx.font = "600 11.5px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
         const visibleDongs = [];
         for (const d of DONGS) {
@@ -1149,27 +1645,26 @@
           const [sx, sy] = worldToScreen(d.cx, d.cy);
           if (sx < 0 || sx > w || sy < 0 || sy > h) continue;
           const m = getRegionMetrics(d, state.hour, state.day);
-          const isSel = state.selectedLevel === "dong" && state.selectedId === d.id;
+          const isSel = state.selected && state.selected.kind === "dong" && state.selected.id === d.id;
           visibleDongs.push({ d, sx, sy, m, isSel, score: isSel ? 1e9 : (Math.abs(m.deltaPct) + m.cur) });
         }
         visibleDongs.sort((a, b) => b.score - a.score);
         for (const v of visibleDongs) {
           const valStr = state.metric === "volume"
-            ? `${v.m.cur.toFixed(1)}`
+            ? `${v.m.cur.toFixed(1)}G`
             : state.metric === "deltaAbs"
-              ? formatSigned(v.m.deltaAbs, 1)
+              ? formatDeltaTraffic(v.m.deltaAbs)
               : formatSigned(state.metric === "vsAvg" ? v.m.vsAvg : v.m.deltaPct, 0, "%");
-          const label = (zoomLevel >= 3.2 || v.isSel) ? `${v.d.nm} ${valStr}` : v.d.nm;
+          const label = (zoomLevel >= 3.2 || v.isSel) && state.level === "dong" ? `${v.d.nm} ${valStr}` : v.d.nm;
           const tw = ctx.measureText(label).width + 8;
           if (!canPlace(v.sx, v.sy, tw, 16, v.isSel)) continue;
           ctx.lineWidth = v.isSel ? 3.8 : 3;
-          ctx.strokeStyle = light ? "rgba(255,255,255,0.94)" : "rgba(15,20,27,0.94)";
+          ctx.strokeStyle = light ? "rgba(255,255,255,0.92)" : "rgba(15,20,27,0.92)";
           ctx.strokeText(label, v.sx, v.sy);
           ctx.fillStyle = fgColor;
           ctx.fillText(label, v.sx, v.sy);
         }
       } else {
-        // Show 시·군·구 names (shortened cleanly e.g. 수원시영통구 -> 수원 영통)
         ctx.font = "600 11.5px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif";
         for (const s of SGGS) {
           if (state.filterSgg !== -1 && s.id !== state.filterSgg) continue;
@@ -1190,82 +1685,206 @@
     }
 
     // -----------------------------------------------------------------------
-    // 5. Hit Testing & Tooltip Sparkline
+    // 6. O(1) Mathematical Hex Hit Testing + Polygon Hit Testing
     // -----------------------------------------------------------------------
+    function hitTestHex1km(wx, wy) {
+      const approxRow = Math.round(wy / HEX_DY);
+      let bestId = -1, bestD2 = HEX_R * HEX_R * 1.05;
+      for (let r = approxRow - 1; r <= approxRow + 1; r++) {
+        if (r < 0) continue;
+        const xOff = (r & 1) ? HEX_DX * 0.5 : 0;
+        const approxCol = Math.round((wx - xOff) / HEX_DX);
+        for (let c = approxCol - 1; c <= approxCol + 1; c++) {
+          if (c < 0) continue;
+          const cid = cellByKey.get((r << 10) | c);
+          if (cid === undefined) continue;
+          const dx = wx - cellX[cid], dy = wy - cellY[cid];
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) { bestD2 = d2; bestId = cid; }
+        }
+      }
+      return bestId;
+    }
+
     function hitTest(sx, sy) {
       const [wx, wy] = screenToWorld(sx, sy);
+      if (state.level === "cell") {
+        if (isMicroActive()) {
+          // Check nearby 1km parents' 7 micro-children for exact hit
+          const approxRow = Math.round(wy / HEX_DY);
+          let best = null, bestD2 = MICRO_R * MICRO_R * 1.08;
+          for (let r = approxRow - 1; r <= approxRow + 1; r++) {
+            if (r < 0) continue;
+            const xOff = (r & 1) ? HEX_DX * 0.5 : 0;
+            const approxCol = Math.round((wx - xOff) / HEX_DX);
+            for (let c = approxCol - 1; c <= approxCol + 1; c++) {
+              const pid = cellByKey.get((r << 10) | c);
+              if (pid === undefined) continue;
+              const children = getMicroChildren(pid);
+              for (let k = 0; k < 7; k++) {
+                const mc = children[k];
+                const d2 = (wx - mc.x) * (wx - mc.x) + (wy - mc.y) * (wy - mc.y);
+                if (d2 < bestD2) { bestD2 = d2; best = { kind: "micro", id: mc.id, parentIdx: pid, subIdx: k }; }
+              }
+            }
+          }
+          return best;
+        } else {
+          const cid = hitTestHex1km(wx, wy);
+          return cid !== -1 ? { kind: "cell", id: cid } : null;
+        }
+      }
       const items = state.level === "dong" ? DONGS : SGGS;
       for (let i = items.length - 1; i >= 0; i--) {
         const it = items[i];
         const b = it.bbox;
         if (wx < b[0] || wx > b[2] || wy < b[1] || wy > b[3]) continue;
-        if (ctx.isPointInPath(it.path, wx, wy)) return i;
+        if (ctx.isPointInPath(it.path, wx, wy)) return { kind: state.level, id: i };
       }
-      return -1;
+      return null;
+    }
+
+    function sameTarget(a, b) {
+      if (!a && !b) return true;
+      if (!a || !b) return false;
+      return a.kind === b.kind && a.id === b.id;
+    }
+
+    function resolveTargetInfo(tgt) {
+      if (!tgt) return null;
+      if (tgt.kind === "micro") {
+        const mc = getMicroChildren(tgt.parentIdx)[tgt.subIdx];
+        const d = DONGS[mc.did];
+        const [lon, lat] = worldToLonLat(mc.x, mc.y);
+        return {
+          title: `${d.nm} · 초미세셀 #${tgt.parentIdx}-${tgt.subIdx + 1}`,
+          sgg: `경기도 ${d.sggName}`,
+          code: `385m H3 · ${lat.toFixed(4)}°N ${lon.toFixed(4)}°E`,
+          typeLabel: mc.typeLabel,
+          anc: mc.anc,
+          km2: 0.13,
+          g5: mc.g5,
+          mix: mc.mix,
+          parentDongId: mc.did,
+          m: getMicroMetrics(mc, state.hour, state.day),
+          arrPrimary: mc[state.day],
+          arrAlt: mc[state.day === "wd" ? "we" : "wd"],
+          offset: 0,
+        };
+      }
+      if (tgt.kind === "cell") {
+        const cid = tgt.id;
+        const d = DONGS[cellDong[cid]];
+        const [lon, lat] = worldToLonLat(cellX[cid], cellY[cid]);
+        const tp = TYPE_KEYS[cellTpIdx[cid]];
+        return {
+          title: `${d.nm} · 1km셀 #${cid + 1}`,
+          sgg: `경기도 ${d.sggName}`,
+          code: `1.0km 셀 · ${lat.toFixed(3)}°N ${lon.toFixed(3)}°E`,
+          typeLabel: TYPE_LABELS[tp],
+          anc: cellAncName[cid],
+          km2: 0.90,
+          g5: cellG5[cid],
+          mix: cellMix[cid],
+          parentDongId: cellDong[cid],
+          m: getCellMetrics(cid, state.hour, state.day),
+          arrPrimary: state.day === "wd" ? cellWd : cellWe,
+          arrAlt: state.day === "wd" ? cellWe : cellWd,
+          offset: cid * 24,
+        };
+      }
+      if (tgt.kind === "dong") {
+        const d = DONGS[tgt.id];
+        return {
+          title: d.nm,
+          sgg: `경기도 ${d.sggName}`,
+          code: `행정동 ${d.cd}`,
+          typeLabel: d.typeLabel,
+          anc: d.anc,
+          km2: d.km2,
+          g5: d.g5,
+          mix: d.mix,
+          parentDongId: -1,
+          m: getRegionMetrics(d, state.hour, state.day),
+          arrPrimary: d[state.day],
+          arrAlt: d[state.day === "wd" ? "we" : "wd"],
+          offset: 0,
+        };
+      }
+      const s = SGGS[tgt.id];
+      return {
+        title: s.name,
+        sgg: `경기도 · 관할 ${s.dongs.length}개 행정동`,
+        code: `시군구 ${s.cd}`,
+        typeLabel: s.typeLabel,
+        anc: "",
+        km2: s.km2,
+        g5: s.g5,
+        mix: s.mix,
+        parentDongId: -1,
+        m: getRegionMetrics(s, state.hour, state.day),
+        arrPrimary: s[state.day],
+        arrAlt: s[state.day === "wd" ? "we" : "wd"],
+        offset: 0,
+      };
     }
 
     const tooltipEl = document.getElementById("mapTooltip");
     const ttSpark = document.getElementById("ttSpark");
 
-    function updateTooltip(idx, clientX, clientY) {
-      if (idx === -1) {
-        tooltipEl.classList.add("hidden");
-        return;
-      }
-      const items = state.level === "dong" ? DONGS : SGGS;
-      const item = items[idx];
-      const m = getRegionMetrics(item, state.hour, state.day);
+    function updateTooltip(tgt, clientX, clientY) {
+      if (!tgt) { tooltipEl.classList.add("hidden"); return; }
+      const info = resolveTargetInfo(tgt);
+      if (!info) { tooltipEl.classList.add("hidden"); return; }
 
-      document.getElementById("ttSgg").textContent = state.level === "dong" ? item.sggName : `경기도 · ${item.dongs.length}개 행정동`;
-      document.getElementById("ttName").textContent = item.nm;
-      document.getElementById("ttType").textContent = item.typeLabel;
-      document.getElementById("ttVol").textContent = `${m.cur.toFixed(2)} Gbps`;
+      document.getElementById("ttSgg").textContent = info.sgg;
+      document.getElementById("ttName").textContent = info.title;
+      document.getElementById("ttType").textContent = info.typeLabel;
+      const ancEl = document.getElementById("ttAnchor");
+      if (info.anc) { ancEl.textContent = `인근 거점: ${info.anc}`; ancEl.classList.remove("hidden"); }
+      else ancEl.classList.add("hidden");
+
+      document.getElementById("ttVol").textContent = formatTraffic(info.m.cur);
+      document.getElementById("ttDeltaLabel").textContent = state.timeStepMin === 15 ? "15분 전 대비" : "1시간 전 대비";
       const deltaEl = document.getElementById("ttDelta");
-      deltaEl.textContent = `${formatSigned(m.deltaPct, 1, "%")} (${formatSigned(m.deltaAbs, 2)})`;
-      deltaEl.className = "text-sm font-semibold tabular-nums " + deltaColorClass(m.deltaPct);
-      document.getElementById("ttVsAvg").textContent = `일평균 대비 ${formatSigned(m.vsAvg, 1, "%")}`;
+      deltaEl.textContent = `${formatSigned(info.m.deltaPct, 1, "%")} (${formatDeltaTraffic(info.m.deltaAbs)})`;
+      deltaEl.className = "text-sm font-semibold tabular-nums " + deltaColorClass(info.m.deltaPct);
+      document.getElementById("ttVsAvg").textContent = `일평균 대비 ${formatSigned(info.m.vsAvg, 1, "%")}`;
 
-      // Draw mini 24h sparkline
+      // Mini 24h sparkline (96-point smooth)
       const sctx = ttSpark.getContext("2d");
       const sw = ttSpark.width, sh = ttSpark.height;
       sctx.clearRect(0, 0, sw, sh);
-      const arr = item[state.day];
-      const maxV = Math.max(...arr, 0.1);
+      let maxV = 0.01;
+      for (let h = 0; h < 24; h++) {
+        const v = info.arrPrimary[info.offset + h];
+        if (v > maxV) maxV = v;
+      }
       const cs = getComputedStyle(document.documentElement);
       const pri = cs.getPropertyValue("--primary").trim() || "#2563eb";
       const mut = cs.getPropertyValue("--muted-foreground").trim() || "#94a3b8";
 
       sctx.beginPath();
-      for (let h = 0; h < 24; h++) {
-        const px = (h / 23) * (sw - 8) + 4;
-        const py = sh - 4 - (arr[h] / maxV) * (sh - 10);
-        if (h === 0) sctx.moveTo(px, py); else sctx.lineTo(px, py);
+      for (let s = 0; s < 96; s++) {
+        const hf = s * 0.25;
+        const v = evalCurve24(info.arrPrimary, info.offset, hf);
+        const px = (hf / 23.75) * (sw - 8) + 4;
+        const py = sh - 4 - (v / maxV) * (sh - 10);
+        if (s === 0) sctx.moveTo(px, py); else sctx.lineTo(px, py);
       }
-      sctx.strokeStyle = pri;
-      sctx.lineWidth = 1.8;
-      sctx.stroke();
+      sctx.strokeStyle = pri; sctx.lineWidth = 1.7; sctx.stroke();
 
-      // Current hour vertical guide + dot
-      const hx = ((state.hour % 24) / 23) * (sw - 8) + 4;
-      const hy = sh - 4 - (m.cur / maxV) * (sh - 10);
-      sctx.beginPath();
-      sctx.moveTo(hx, 2);
-      sctx.lineTo(hx, sh - 2);
-      sctx.strokeStyle = mut;
-      sctx.lineWidth = 1;
-      sctx.setLineDash([2, 2]);
-      sctx.stroke();
-      sctx.setLineDash([]);
-
-      sctx.beginPath();
-      sctx.arc(hx, hy, 3.2, 0, Math.PI * 2);
-      sctx.fillStyle = m.deltaPct >= 2 ? "#ea580c" : m.deltaPct <= -2 ? "#2563eb" : pri;
+      const hx = ((state.hour % 24) / 23.75) * (sw - 8) + 4;
+      const hy = sh - 4 - (info.m.cur / maxV) * (sh - 10);
+      sctx.beginPath(); sctx.moveTo(hx, 2); sctx.lineTo(hx, sh - 2);
+      sctx.strokeStyle = mut; sctx.lineWidth = 1; sctx.setLineDash([2, 2]); sctx.stroke(); sctx.setLineDash([]);
+      sctx.beginPath(); sctx.arc(hx, hy, 3.2, 0, Math.PI * 2);
+      sctx.fillStyle = info.m.deltaPct >= 0.6 ? "#ea580c" : info.m.deltaPct <= -0.6 ? "#2563eb" : pri;
       sctx.fill();
 
       tooltipEl.classList.remove("hidden");
-      const tw = 260, th = 165;
-      let tx = clientX + 16;
-      let ty = clientY + 14;
+      const tw = 276, th = 180;
+      let tx = clientX + 16, ty = clientY + 14;
       if (tx + tw > window.innerWidth - 10) tx = clientX - tw - 16;
       if (ty + th > window.innerHeight - 10) ty = clientY - th - 14;
       tooltipEl.style.left = Math.max(8, tx) + "px";
@@ -1273,103 +1892,110 @@
     }
 
     // -----------------------------------------------------------------------
-    // 6. Sidebar Updates (KPI, Rankings, Archetype Bars, Detail Inspector)
+    // 7. Sidebar Updates (KPI, Rankings, Archetype Bars, Detail Inspector)
     // -----------------------------------------------------------------------
     function updateSidebar() {
       const hrInt = Math.floor(state.hour) % 24;
-      const hrStr = String(hrInt).padStart(2, "0") + ":00";
+      const clockStr = formatClock(state.hour);
       const dayLabel = state.day === "wd" ? "평일" : "주말";
+      const stepLabel = state.timeStepMin === 15 ? "15분" : "1시간";
 
-      document.getElementById("clockTime").textContent = hrStr;
+      document.getElementById("clockTime").textContent = clockStr;
       document.getElementById("clockPhase").textContent = `${dayLabel} · ${(state.day === "wd" ? HOUR_PHASES_WD : HOUR_PHASES_WE)[hrInt]}`;
-      document.getElementById("kpiTimeBadge").textContent = `${dayLabel} ${hrStr}`;
+      document.getElementById("kpiTimeBadge").textContent = `${dayLabel} ${clockStr}`;
+      document.getElementById("kpiDeltaTitle").textContent = `${stepLabel} 변화`;
+      document.getElementById("archSubLabel").textContent = `${stepLabel} 전 대비`;
+      document.getElementById("rankHeading").textContent =
+        state.level === "cell" ? "시간대별 변화 TOP 1km 셀" : state.level === "dong" ? "시간대별 변화 TOP 행정동" : "시간대별 변화 TOP 시·군·구";
 
       // Province KPI
       const pArr = PROVINCE_TOTAL[state.day];
-      const pCur = getInterpolatedVal(pArr, state.hour);
-      const pPrev = getInterpolatedVal(pArr, state.hour - 1);
-      const pDeltaAbs = pCur - pPrev;
-      const pDeltaPct = pPrev > 0 ? (pDeltaAbs / pPrev) * 100 : 0;
+      const dtH = getDeltaStepHours();
+      const pCur = evalCurve24(pArr, 0, state.hour);
+      const pPrev = evalCurve24(pArr, 0, state.hour - dtH);
+      const pDeltaPct = pPrev > 0 ? ((pCur - pPrev) / pPrev) * 100 : 0;
 
       document.getElementById("kpiTotal").textContent = `${(pCur / 1000).toFixed(2)} Tbps`;
       const kpiDeltaEl = document.getElementById("kpiDelta");
       kpiDeltaEl.textContent = formatSigned(pDeltaPct, 1, "%");
       kpiDeltaEl.className = "text-sm font-bold tabular-nums mt-0.5 " + deltaColorClass(pDeltaPct);
 
+      const surgeCut = state.timeStepMin === 15 ? 3.5 : 10.0;
       let surgeCnt = 0, dropCnt = 0;
       const archAgg = {};
-      const items = state.level === "dong" ? DONGS : SGGS;
-      const scored = [];
 
-      for (const d of DONGS) {
-        const m = getRegionMetrics(d, state.hour, state.day);
-        if (m.deltaPct >= 10) surgeCnt++;
-        else if (m.deltaPct <= -10) dropCnt++;
-        if (!archAgg[d.tp]) archAgg[d.tp] = { sum: 0, cnt: 0 };
-        archAgg[d.tp].sum += m.deltaPct;
-        archAgg[d.tp].cnt += 1;
+      if (state.level === "cell") {
+        // Compute KPI surge/drop & archetype breakdown across 11,286 cells (fast loop)
+        const topCandidates = [];
+        for (let i = 0; i < HEX_COUNT; i++) {
+          const m = getCellMetrics(i, state.hour, state.day);
+          if (m.deltaPct >= surgeCut) surgeCnt++;
+          else if (m.deltaPct <= -surgeCut) dropCnt++;
+          const tp = TYPE_KEYS[cellTpIdx[i]];
+          if (!archAgg[tp]) archAgg[tp] = { sum: 0, cnt: 0 };
+          archAgg[tp].sum += m.deltaPct;
+          archAgg[tp].cnt += 1;
+
+          if (state.filterSgg !== -1 && cellSgg[i] !== state.filterSgg) continue;
+          const score = state.rankTab === "surge" ? m.deltaPct : state.rankTab === "drop" ? -m.deltaPct : m.cur;
+          topCandidates.push({ id: i, score, m });
+        }
+        topCandidates.sort((a, b) => b.score - a.score);
+        // Deduplicate by dong so top 8 highlights diverse hotspots rather than 8 adjacent cells of one dong
+        const top = [];
+        const seenDong = new Map();
+        for (const c of topCandidates) {
+          const did = cellDong[c.id];
+          const cnt = seenDong.get(did) || 0;
+          if (cnt >= 1 && state.filterSgg === -1) continue;
+          seenDong.set(did, cnt + 1);
+          top.push(c);
+          if (top.length >= 8) break;
+        }
+        renderRankRows(top.map((r) => {
+          const d = DONGS[cellDong[r.id]];
+          return {
+            kind: "cell", id: r.id, m: r.m,
+            main: cellAncName[r.id] ? `${d.nm} (${cellAncName[r.id].split("·")[0]})` : `${d.nm} #${r.id + 1}`,
+            sub: d.sggName,
+          };
+        }));
+      } else {
+        for (const d of DONGS) {
+          const m = getRegionMetrics(d, state.hour, state.day);
+          if (m.deltaPct >= surgeCut) surgeCnt++;
+          else if (m.deltaPct <= -surgeCut) dropCnt++;
+          if (!archAgg[d.tp]) archAgg[d.tp] = { sum: 0, cnt: 0 };
+          archAgg[d.tp].sum += m.deltaPct;
+          archAgg[d.tp].cnt += 1;
+        }
+        const items = state.level === "dong" ? DONGS : SGGS;
+        const scored = [];
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (state.filterSgg !== -1 && (state.level === "dong" ? it.s !== state.filterSgg : it.id !== state.filterSgg)) continue;
+          const m = getRegionMetrics(it, state.hour, state.day);
+          const score = state.rankTab === "surge" ? m.deltaPct : state.rankTab === "drop" ? -m.deltaPct : m.cur;
+          scored.push({ id: i, item: it, score, m });
+        }
+        scored.sort((a, b) => b.score - a.score);
+        renderRankRows(scored.slice(0, 8).map((r) => ({
+          kind: state.level, id: r.id, m: r.m,
+          main: state.level === "dong" ? r.item.nm : r.item.name,
+          sub: state.level === "dong" ? r.item.sggName : `${r.item.dongs.length}개 동`,
+        })));
       }
+
       document.getElementById("kpiSurgeDrop").innerHTML =
-        `<span class="text-[#ea580c]">▲${surgeCnt}</span> <span class="text-[var(--muted-foreground)]">/</span> <span class="text-[#2563eb]">▼${dropCnt}</span>`;
-
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i];
-        if (state.filterSgg !== -1 && (state.level === "dong" ? it.s !== state.filterSgg : it.id !== state.filterSgg)) continue;
-        const m = getRegionMetrics(it, state.hour, state.day);
-        scored.push({ idx: i, item: it, m });
-      }
-
-      if (state.rankTab === "surge") scored.sort((a, b) => b.m.deltaPct - a.m.deltaPct);
-      else if (state.rankTab === "drop") scored.sort((a, b) => a.m.deltaPct - b.m.deltaPct);
-      else scored.sort((a, b) => b.m.cur - a.m.cur);
-
-      const top = scored.slice(0, 8);
-      const maxBar = state.rankTab === "vol"
-        ? Math.max(...top.map((x) => x.m.cur), 1)
-        : Math.max(...top.map((x) => Math.abs(x.m.deltaPct)), 10);
-
-      const rankList = document.getElementById("rankList");
-      rankList.innerHTML = top.map((row, rIdx) => {
-        const pct = state.rankTab === "vol"
-          ? Math.min(100, (row.m.cur / maxBar) * 100)
-          : Math.min(100, (Math.abs(row.m.deltaPct) / maxBar) * 100);
-        const barColor = state.rankTab === "vol" ? "var(--primary)" : (row.m.deltaPct >= 0 ? "#ea580c" : "#2563eb");
-        const valText = state.rankTab === "vol"
-          ? `${row.m.cur.toFixed(1)} Gbps`
-          : formatSigned(row.m.deltaPct, 1, "%");
-        const subText = state.rankTab === "vol"
-          ? formatSigned(row.m.deltaPct, 1, "%")
-          : `${formatSigned(row.m.deltaAbs, 1)}G`;
-        const valClass = state.rankTab === "vol" ? "text-[var(--foreground)]" : deltaColorClass(row.m.deltaPct);
-        const labelMain = state.level === "dong" ? `${row.item.nm}` : row.item.name;
-        const labelSub = state.level === "dong" ? row.item.sggName : `${row.item.dongs.length}개 동`;
-
-        return `
-          <button data-pick="${row.idx}" class="rank-row w-full text-left px-2 py-1.5 rounded-md cursor-pointer block">
-            <div class="flex items-center justify-between gap-2 text-xs">
-              <div class="flex items-center gap-1.5 min-w-0">
-                <span class="w-4 text-[12px] font-mono text-[var(--muted-foreground)] shrink-0">${rIdx + 1}</span>
-                <span class="font-medium truncate">${labelMain}</span>
-                <span class="text-[12px] text-[var(--muted-foreground)] truncate">${labelSub}</span>
-              </div>
-              <div class="shrink-0 flex items-center gap-1.5 tabular-nums">
-                <span class="text-[12px] text-[var(--muted-foreground)]">${subText}</span>
-                <span class="font-semibold w-14 text-right ${valClass}">${valText}</span>
-              </div>
-            </div>
-            <div class="w-full h-1 mt-1 rounded-full bg-[var(--background)] overflow-hidden">
-              <div class="h-full rounded-full" style="width:${pct.toFixed(1)}%; background:${barColor};"></div>
-            </div>
-          </button>`;
-      }).join("");
+        `<span class="text-[#ea580c]">▲${surgeCnt.toLocaleString()}</span> <span class="text-[var(--muted-foreground)]">/</span> <span class="text-[#2563eb]">▼${dropCnt.toLocaleString()}</span>`;
 
       // Archetype breakdown bars
-      const archOrder = ["biz", "ind", "hub", "res", "tour", "univ", "rural"];
-      const archHtml = archOrder.map((tp) => {
+      const barScale = state.timeStepMin === 15 ? 3.2 : 1.15;
+      document.getElementById("archetypeBars").innerHTML = TYPE_KEYS.map((tp) => {
         const stat = archAgg[tp];
         if (!stat) return "";
         const avgPct = stat.sum / stat.cnt;
-        const wPct = Math.min(50, Math.abs(avgPct) * 1.15);
+        const wPct = Math.min(50, Math.abs(avgPct) * barScale);
         const isPos = avgPct >= 0;
         const col = isPos ? "#ea580c" : "#2563eb";
         return `
@@ -1382,87 +2008,125 @@
             <span class="w-12 text-right font-mono tabular-nums font-semibold ${deltaColorClass(avgPct)}">${formatSigned(avgPct, 1, "%")}</span>
           </div>`;
       }).join("");
-      document.getElementById("archetypeBars").innerHTML = archHtml;
 
-      // Update detail inspector if a region is pinned
-      if (state.selectedId !== -1) {
-        updateDetailInspector();
-      }
+      if (state.selected) updateDetailInspector();
     }
 
-    function selectRegion(idx, level = state.level, flyTo = true) {
-      state.selectedId = idx;
-      state.selectedLevel = level;
-      if (idx === -1) {
+    function renderRankRows(rows) {
+      const maxBar = state.rankTab === "vol"
+        ? Math.max(...rows.map((x) => x.m.cur), 0.1)
+        : Math.max(...rows.map((x) => Math.abs(x.m.deltaPct)), 3);
+      document.getElementById("rankList").innerHTML = rows.map((row, rIdx) => {
+        const pct = state.rankTab === "vol"
+          ? Math.min(100, (row.m.cur / maxBar) * 100)
+          : Math.min(100, (Math.abs(row.m.deltaPct) / maxBar) * 100);
+        const barColor = state.rankTab === "vol" ? "var(--primary)" : (row.m.deltaPct >= 0 ? "#ea580c" : "#2563eb");
+        const valText = state.rankTab === "vol" ? formatTraffic(row.m.cur) : formatSigned(row.m.deltaPct, 1, "%");
+        const subText = state.rankTab === "vol" ? formatSigned(row.m.deltaPct, 1, "%") : formatDeltaTraffic(row.m.deltaAbs);
+        const valClass = state.rankTab === "vol" ? "text-[var(--foreground)]" : deltaColorClass(row.m.deltaPct);
+        return `
+          <button data-pick-kind="${row.kind}" data-pick-id="${row.id}" class="rank-row w-full text-left px-2 py-1.5 rounded-md cursor-pointer block">
+            <div class="flex items-center justify-between gap-2 text-xs">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="w-4 text-[12px] font-mono text-[var(--muted-foreground)] shrink-0">${rIdx + 1}</span>
+                <span class="font-medium truncate">${row.main}</span>
+                <span class="text-[12px] text-[var(--muted-foreground)] truncate shrink-0">${row.sub}</span>
+              </div>
+              <div class="shrink-0 flex items-center gap-1.5 tabular-nums">
+                <span class="text-[12px] text-[var(--muted-foreground)]">${subText}</span>
+                <span class="font-semibold w-14 text-right ${valClass}">${valText}</span>
+              </div>
+            </div>
+            <div class="w-full h-1 mt-1 rounded-full bg-[var(--background)] overflow-hidden">
+              <div class="h-full rounded-full" style="width:${pct.toFixed(1)}%; background:${barColor};"></div>
+            </div>
+          </button>`;
+      }).join("");
+    }
+
+    function selectTarget(tgt, flyTo = true) {
+      state.selected = tgt;
+      if (!tgt) {
         document.getElementById("detailPanel").classList.add("hidden");
         document.getElementById("overviewPanel").classList.remove("hidden");
         renderMap();
         return;
       }
-      const items = level === "dong" ? DONGS : SGGS;
-      const item = items[idx];
-      if (!item) return;
-
       document.getElementById("overviewPanel").classList.add("hidden");
       document.getElementById("detailPanel").classList.remove("hidden");
-      // Make sidebar visible on smaller screens if user clicked a region
       openMobileSidebar();
 
       if (flyTo) {
-        const b = item.bbox;
-        // Expand small dong bbox slightly for comfortable context zoom
-        const cx = (b[0] + b[2]) * 0.5;
-        const cy = (b[1] + b[3]) * 0.5;
-        const span = Math.max(b[2] - b[0], b[3] - b[1], level === "dong" ? 420 : 1200);
-        fitCameraToBBox([cx - span * 0.85, cy - span * 0.85, cx + span * 0.85, cy + span * 0.85], true, 0.14);
+        if (tgt.kind === "cell") {
+          const cx = cellX[tgt.id], cy = cellY[tgt.id];
+          // Fly close enough to trigger 385m micro-cell detail!
+          const span = 320;
+          fitCameraToBBox([cx - span, cy - span, cx + span, cy + span], true, 0.14);
+        } else if (tgt.kind === "micro") {
+          const ch = getMicroChildren(tgt.parentIdx)[tgt.subIdx];
+          const span = 220;
+          fitCameraToBBox([ch.x - span, ch.y - span, ch.x + span, ch.y + span], true, 0.14);
+        } else {
+          const item = tgt.kind === "dong" ? DONGS[tgt.id] : SGGS[tgt.id];
+          const b = item.bbox;
+          const cx = (b[0] + b[2]) * 0.5, cy = (b[1] + b[3]) * 0.5;
+          const span = Math.max(b[2] - b[0], b[3] - b[1], tgt.kind === "dong" ? 420 : 1200);
+          fitCameraToBBox([cx - span * 0.85, cy - span * 0.85, cx + span * 0.85, cy + span * 0.85], true, 0.14);
+        }
       }
       updateDetailInspector();
       renderMap();
     }
 
     function updateDetailInspector() {
-      const items = state.selectedLevel === "dong" ? DONGS : SGGS;
-      const item = items[state.selectedId];
-      if (!item) return;
+      const info = resolveTargetInfo(state.selected);
+      if (!info) return;
 
-      const m = getRegionMetrics(item, state.hour, state.day);
-      const arr = item[state.day];
-      const altKey = state.day === "wd" ? "we" : "wd";
-      const altArr = item[altKey];
       let peakH = 0, peakV = -1;
-      for (let h = 0; h < 24; h++) {
-        if (arr[h] > peakV) { peakV = arr[h]; peakH = h; }
+      for (let s = 0; s < 96; s++) {
+        const hf = s * 0.25;
+        const v = evalCurve24(info.arrPrimary, info.offset, hf);
+        if (v > peakV) { peakV = v; peakH = hf; }
       }
 
-      document.getElementById("detCode").textContent = `코드 ${item.cd}`;
-      document.getElementById("detSgg").textContent = state.selectedLevel === "dong" ? `경기도 ${item.sggName}` : "경기도 시·군·구";
-      document.getElementById("detTitle").textContent = item.nm;
-      document.getElementById("detType").textContent = item.typeLabel;
+      document.getElementById("detCode").textContent = info.code;
+      document.getElementById("detSgg").textContent = info.sgg;
+      document.getElementById("detTitle").textContent = info.title;
+      document.getElementById("detType").textContent = info.typeLabel;
 
-      const metaParts = [`면적 ${item.km2} km²`];
-      if (state.selectedLevel === "dong" && item.anc) metaParts.push(`핵심 거점: ${item.anc}`);
-      if (state.selectedLevel === "sgg") metaParts.push(`관할 행정동 ${item.dongs.length}개`);
+      const metaParts = [`면적 약 ${info.km2} km²`];
+      if (info.anc) metaParts.push(`핵심 거점: ${info.anc}`);
       document.getElementById("detMeta").textContent = metaParts.join(" · ");
 
-      document.getElementById("detVol").textContent = `${m.cur.toFixed(2)} Gbps`;
+      const pAct = document.getElementById("detParentAction");
+      if (info.parentDongId !== -1) {
+        const pd = DONGS[info.parentDongId];
+        document.getElementById("jumpParentDongBtn").textContent = `소속 행정동 보기: ${pd.sggName} ${pd.nm}`;
+        document.getElementById("jumpParentDongBtn").dataset.dongId = String(pd.id);
+        pAct.classList.remove("hidden");
+      } else {
+        pAct.classList.add("hidden");
+      }
+
+      document.getElementById("detVol").textContent = formatTraffic(info.m.cur);
+      document.getElementById("detDeltaLbl").textContent = state.timeStepMin === 15 ? "15분 전 대비 변화" : "1시간 전 대비 변화";
       const dEl = document.getElementById("detDelta");
-      dEl.textContent = `${formatSigned(m.deltaPct, 1, "%")} (${formatSigned(m.deltaAbs, 2)})`;
-      dEl.className = "text-sm font-bold tabular-nums mt-0.5 " + deltaColorClass(m.deltaPct);
+      dEl.textContent = `${formatSigned(info.m.deltaPct, 1, "%")} (${formatDeltaTraffic(info.m.deltaAbs)})`;
+      dEl.className = "text-sm font-bold tabular-nums mt-0.5 " + deltaColorClass(info.m.deltaPct);
       const avgEl = document.getElementById("detVsAvg");
-      avgEl.textContent = formatSigned(m.vsAvg, 1, "%");
-      avgEl.className = "text-sm font-bold tabular-nums mt-0.5 " + deltaColorClass(m.vsAvg);
-      document.getElementById("detPeak").textContent = `${String(peakH).padStart(2, "0")}:00 (${peakV.toFixed(1)}G)`;
+      avgEl.textContent = formatSigned(info.m.vsAvg, 1, "%");
+      avgEl.className = "text-sm font-bold tabular-nums mt-0.5 " + deltaColorClass(info.m.vsAvg);
+      document.getElementById("detPeak").textContent = `${formatClock(peakH)} (${formatTraffic(peakV)})`;
 
       document.getElementById("detCurvePrimary").textContent = state.day === "wd" ? "평일" : "주말";
       document.getElementById("detCurveAlt").textContent = state.day === "wd" ? "주말 비교" : "평일 비교";
+      document.getElementById("detBarUnit").textContent = state.timeStepMin === 15 ? "막대: 15분 Δ" : "막대: 1시간 Δ";
 
-      // Draw 24h dual chart (traffic line + weekday/weekend comparison + delta bars)
-      drawDetailChart(arr, altArr);
+      drawDetailChart(info.arrPrimary, info.arrAlt, info.offset);
 
-      // 5G & Service Mix
-      document.getElementById("det5gLabel").textContent = `5G ${item.g5}% · LTE ${100 - item.g5}%`;
-      document.getElementById("det5gBar").style.width = item.g5 + "%";
-      document.getElementById("detLteBar").style.width = (100 - item.g5) + "%";
+      document.getElementById("det5gLabel").textContent = `5G ${info.g5}% · LTE ${100 - info.g5}%`;
+      document.getElementById("det5gBar").style.width = info.g5 + "%";
+      document.getElementById("detLteBar").style.width = (100 - info.g5) + "%";
 
       const svcLabels = ["동영상·스트리밍", "SNS·메신저", "업무·클라우드", "내비·모빌리티"];
       const svcColors = ["#2563eb", "#0d9488", "#ea580c", "#d97706"];
@@ -1470,38 +2134,74 @@
         <div class="flex items-center gap-2">
           <span class="w-24 shrink-0 text-[var(--muted-foreground)]">${lbl}</span>
           <div class="flex-1 h-1.5 rounded-full bg-[var(--background)] overflow-hidden">
-            <div class="h-full rounded-full" style="width:${item.mix[i]}%; background:${svcColors[i]};"></div>
+            <div class="h-full rounded-full" style="width:${info.mix[i]}%; background:${svcColors[i]};"></div>
           </div>
-          <span class="w-8 text-right font-mono tabular-nums">${item.mix[i]}%</span>
+          <span class="w-8 text-right font-mono tabular-nums">${info.mix[i]}%</span>
         </div>`).join("");
 
-      // Sibling comparison
+      // Sibling / Nearby comparison
       const sibTitle = document.getElementById("detSiblingTitle");
       const sibList = document.getElementById("detSiblingList");
-      let siblings = [];
-      if (state.selectedLevel === "dong") {
-        sibTitle.textContent = `${item.sggName} 내 변화량 상위 행정동`;
-        siblings = DONGS.filter((d) => d.s === item.s).map((d) => ({ id: d.id, nm: d.nm, level: "dong", m: getRegionMetrics(d, state.hour, state.day) }));
+      let rows = [];
+      if (state.selected.kind === "micro") {
+        const pid = state.selected.parentIdx;
+        const d = DONGS[cellDong[pid]];
+        sibTitle.textContent = `${d.nm} 동일 1km 내 7개 초미세 셀 (385m)`;
+        const ch = getMicroChildren(pid);
+        rows = ch.map((mc) => ({
+          kind: "micro", id: mc.id, parentIdx: pid, subIdx: mc.subIdx,
+          nm: `초미세셀 #${pid}-${mc.subIdx + 1}${mc.subIdx === 0 ? " (중심)" : ""}`,
+          m: getMicroMetrics(mc, state.hour, state.day),
+          active: mc.subIdx === state.selected.subIdx,
+        }));
+      } else if (state.selected.kind === "cell") {
+        const did = cellDong[state.selected.id];
+        const d = DONGS[did];
+        sibTitle.textContent = `${d.nm} 내부 1km 셀 비교`;
+        for (let i = 0; i < HEX_COUNT; i++) {
+          if (cellDong[i] === did) {
+            rows.push({
+              kind: "cell", id: i,
+              nm: cellAncName[i] ? `셀 #${i + 1} (${cellAncName[i].split("·")[0]})` : `1km셀 #${i + 1}`,
+              m: getCellMetrics(i, state.hour, state.day),
+              active: i === state.selected.id,
+            });
+          }
+        }
+        rows.sort((a, b) => Math.abs(b.m.deltaPct) - Math.abs(a.m.deltaPct));
+        rows = rows.slice(0, 7);
+      } else if (state.selected.kind === "dong") {
+        const d = DONGS[state.selected.id];
+        sibTitle.textContent = `${d.sggName} 내 변화량 상위 행정동`;
+        rows = DONGS.filter((x) => x.s === d.s).map((x) => ({
+          kind: "dong", id: x.id, nm: x.nm,
+          m: getRegionMetrics(x, state.hour, state.day),
+          active: x.id === d.id,
+        })).sort((a, b) => Math.abs(b.m.deltaPct) - Math.abs(a.m.deltaPct)).slice(0, 6);
       } else {
-        sibTitle.textContent = `${item.name} 관할 행정동 (클릭하여 상세 보기)`;
-        siblings = item.dongs.map((d) => ({ id: d.id, nm: d.nm, level: "dong", m: getRegionMetrics(d, state.hour, state.day) }));
+        const s = SGGS[state.selected.id];
+        sibTitle.textContent = `${s.name} 관할 행정동`;
+        rows = s.dongs.map((x) => ({
+          kind: "dong", id: x.id, nm: x.nm,
+          m: getRegionMetrics(x, state.hour, state.day),
+          active: false,
+        })).sort((a, b) => Math.abs(b.m.deltaPct) - Math.abs(a.m.deltaPct)).slice(0, 6);
       }
-      siblings.sort((a, b) => Math.abs(b.m.deltaPct) - Math.abs(a.m.deltaPct));
-      sibList.innerHTML = siblings.slice(0, 6).map((s) => `
-        <button data-sib="${s.id}" class="rank-row w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs cursor-pointer ${s.id === state.selectedId && state.selectedLevel === 'dong' ? 'bg-[var(--secondary)] font-semibold' : ''}">
+
+      sibList.innerHTML = rows.map((s) => `
+        <button data-sib-kind="${s.kind}" data-sib-id="${s.id}" data-sib-parent="${s.parentIdx ?? ''}" data-sib-sub="${s.subIdx ?? ''}" class="rank-row w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs cursor-pointer ${s.active ? 'bg-[var(--secondary)] font-semibold' : ''}">
           <span class="truncate">${s.nm}</span>
           <span class="tabular-nums flex items-center gap-2 shrink-0">
-            <span class="text-[var(--muted-foreground)]">${s.m.cur.toFixed(1)}G</span>
+            <span class="text-[var(--muted-foreground)]">${formatTraffic(s.m.cur)}</span>
             <span class="font-semibold w-14 text-right ${deltaColorClass(s.m.deltaPct)}">${formatSigned(s.m.deltaPct, 1, "%")}</span>
           </span>
         </button>`).join("");
     }
 
-    function drawDetailChart(arr, altArr) {
+    function drawDetailChart(arrPri, arrAlt, offset) {
       const canvas = document.getElementById("detailChart");
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const cw = canvas.clientWidth || 310;
-      const ch = canvas.clientHeight || 156;
+      const cw = canvas.clientWidth || 310, ch = canvas.clientHeight || 156;
       canvas.width = Math.round(cw * dpr);
       canvas.height = Math.round(ch * dpr);
 
@@ -1514,107 +2214,93 @@
       const mut = cs.getPropertyValue("--muted-foreground").trim() || "#94a3b8";
       const brd = cs.getPropertyValue("--border").trim() || "#334155";
 
-      const padL = 32, padR = 10, padT = 12, padB = 22;
-      const plotW = cw - padL - padR;
-      const plotH = ch - padT - padB;
+      const padL = 34, padR = 10, padT = 12, padB = 22;
+      const plotW = cw - padL - padR, plotH = ch - padT - padB;
       const lineH = plotH * 0.68;
-      const barTop = padT + lineH + 6;
-      const barH = plotH - lineH - 6;
+      const barTop = padT + lineH + 6, barH = plotH - lineH - 6;
 
-      const maxV = Math.max(...arr, ...altArr, 0.5) * 1.1;
-      const deltas = arr.map((v, h) => v - arr[(h + 23) % 24]);
-      const maxD = Math.max(...deltas.map((d) => Math.abs(d)), 0.1);
+      const N = state.timeStepMin === 15 ? 96 : 24;
+      const stepH = state.timeStepMin === 15 ? 0.25 : 1.0;
+      const vals = new Float32Array(N);
+      const alts = new Float32Array(N);
+      const deltas = new Float32Array(N);
+      let maxV = 0.05, maxD = 0.005;
+      for (let i = 0; i < N; i++) {
+        const hf = i * stepH;
+        vals[i] = evalCurve24(arrPri, offset, hf);
+        alts[i] = evalCurve24(arrAlt, offset, hf);
+        if (vals[i] > maxV) maxV = vals[i];
+        if (alts[i] > maxV) maxV = alts[i];
+      }
+      maxV *= 1.1;
+      for (let i = 0; i < N; i++) {
+        deltas[i] = vals[i] - vals[(i + N - 1) % N];
+        if (Math.abs(deltas[i]) > maxD) maxD = Math.abs(deltas[i]);
+      }
 
-      // Horizontal grid lines
-      c.strokeStyle = brd;
-      c.globalAlpha = 0.45;
-      c.lineWidth = 1;
-      c.font = "10px monospace";
-      c.fillStyle = mut;
-      c.textAlign = "right";
-      c.textBaseline = "middle";
+      c.strokeStyle = brd; c.globalAlpha = 0.45; c.lineWidth = 1;
+      c.font = "10px monospace"; c.fillStyle = mut; c.textAlign = "right"; c.textBaseline = "middle";
       for (const frac of [0, 0.5, 1]) {
         const y = padT + lineH * (1 - frac);
         c.beginPath(); c.moveTo(padL, y); c.lineTo(cw - padR, y); c.stroke();
         c.globalAlpha = 0.85;
-        c.fillText((maxV * frac).toFixed(maxV >= 10 ? 0 : 1), padL - 4, y);
+        const vLbl = maxV * frac;
+        c.fillText(vLbl >= 10 ? vLbl.toFixed(0) : vLbl >= 1 ? vLbl.toFixed(1) : vLbl.toFixed(2), padL - 4, y);
         c.globalAlpha = 0.45;
       }
       c.globalAlpha = 1;
 
-      const xFor = (h) => padL + (h / 23) * plotW;
+      const xForH = (hf) => padL + (hf / 23.75) * plotW;
 
-      // Delta bars at bottom
+      // Delta bars
       const barZero = barTop + barH * 0.5;
       c.strokeStyle = brd;
       c.beginPath(); c.moveTo(padL, barZero); c.lineTo(cw - padR, barZero); c.stroke();
-      const bw = Math.max(3, (plotW / 24) * 0.62);
-      for (let h = 0; h < 24; h++) {
-        const x = xFor(h) - bw / 2;
-        const bh = (deltas[h] / maxD) * (barH * 0.48);
-        c.fillStyle = deltas[h] >= 0 ? "rgba(234, 88, 12, 0.78)" : "rgba(37, 99, 235, 0.78)";
+      const bw = Math.max(1.5, (plotW / N) * 0.72);
+      for (let i = 0; i < N; i++) {
+        const x = xForH(i * stepH) - bw / 2;
+        const bh = (deltas[i] / maxD) * (barH * 0.48);
+        c.fillStyle = deltas[i] >= 0 ? "rgba(234, 88, 12, 0.78)" : "rgba(37, 99, 235, 0.78)";
         if (bh >= 0) c.fillRect(x, barZero - bh, bw, bh);
         else c.fillRect(x, barZero, bw, -bh);
       }
 
-      // Comparison dashed line
+      // Comparison dashed curve
       c.beginPath();
-      for (let h = 0; h < 24; h++) {
-        const x = xFor(h), y = padT + lineH * (1 - altArr[h] / maxV);
-        if (h === 0) c.moveTo(x, y); else c.lineTo(x, y);
+      for (let i = 0; i < N; i++) {
+        const x = xForH(i * stepH), y = padT + lineH * (1 - alts[i] / maxV);
+        if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
       }
-      c.strokeStyle = mut;
-      c.globalAlpha = 0.65;
-      c.lineWidth = 1.3;
-      c.setLineDash([3, 3]);
-      c.stroke();
-      c.setLineDash([]);
-      c.globalAlpha = 1;
+      c.strokeStyle = mut; c.globalAlpha = 0.65; c.lineWidth = 1.25; c.setLineDash([3, 3]); c.stroke();
+      c.setLineDash([]); c.globalAlpha = 1;
 
-      // Primary line + subtle area
+      // Primary curve
       c.beginPath();
-      for (let h = 0; h < 24; h++) {
-        const x = xFor(h), y = padT + lineH * (1 - arr[h] / maxV);
-        if (h === 0) c.moveTo(x, y); else c.lineTo(x, y);
+      for (let i = 0; i < N; i++) {
+        const x = xForH(i * stepH), y = padT + lineH * (1 - vals[i] / maxV);
+        if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
       }
-      c.strokeStyle = pri;
-      c.lineWidth = 2;
-      c.stroke();
+      c.strokeStyle = pri; c.lineWidth = 2; c.stroke();
 
-      // Current hour vertical cursor
-      const hx = xFor(state.hour % 24);
-      const curV = getInterpolatedVal(arr, state.hour);
+      // Current cursor
+      const hx = xForH(state.hour % 24);
+      const curV = evalCurve24(arrPri, offset, state.hour);
       const hy = padT + lineH * (1 - curV / maxV);
-      c.beginPath();
-      c.moveTo(hx, padT);
-      c.lineTo(hx, ch - padB);
-      c.strokeStyle = "#ea580c";
-      c.lineWidth = 1.3;
-      c.stroke();
+      c.beginPath(); c.moveTo(hx, padT); c.lineTo(hx, ch - padB);
+      c.strokeStyle = "#ea580c"; c.lineWidth = 1.3; c.stroke();
+      c.beginPath(); c.arc(hx, hy, 4, 0, Math.PI * 2); c.fillStyle = "#ea580c"; c.fill();
 
-      c.beginPath();
-      c.arc(hx, hy, 4, 0, Math.PI * 2);
-      c.fillStyle = "#ea580c";
-      c.fill();
-
-      // X ticks
-      c.fillStyle = mut;
-      c.textAlign = "center";
-      c.textBaseline = "top";
-      for (const h of [0, 6, 12, 18, 23]) {
-        c.fillText(`${h}시`, xFor(h), ch - 14);
-      }
+      c.fillStyle = mut; c.textAlign = "center"; c.textBaseline = "top";
+      for (const h of [0, 6, 12, 18, 23]) c.fillText(`${h}시`, xForH(h), ch - 14);
     }
 
     // -----------------------------------------------------------------------
-    // 7. Bottom Province Waveform Canvas
+    // 8. Bottom Province Waveform & Animation Loop
     // -----------------------------------------------------------------------
     const waveCanvas = document.getElementById("timelineWave");
-
     function drawTimelineWave() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const cw = waveCanvas.clientWidth || 400;
-      const ch = waveCanvas.clientHeight || 30;
+      const cw = waveCanvas.clientWidth || 400, ch = waveCanvas.clientHeight || 28;
       waveCanvas.width = Math.round(cw * dpr);
       waveCanvas.height = Math.round(ch * dpr);
 
@@ -1623,64 +2309,60 @@
       c.clearRect(0, 0, cw, ch);
 
       const arr = PROVINCE_TOTAL[state.day];
-      const deltas = arr.map((v, h) => v - arr[(h + 23) % 24]);
-      const maxD = Math.max(...deltas.map((d) => Math.abs(d)), 1);
-      const maxV = Math.max(...arr, 1);
-
-      const padX = 8;
-      const plotW = cw - padX * 2;
-      const xFor = (h) => padX + (h / 23) * plotW;
-
-      // Subtle delta bars
-      const midY = ch * 0.56;
-      const bw = Math.max(4, (plotW / 24) * 0.55);
-      for (let h = 0; h < 24; h++) {
-        const bh = (deltas[h] / maxD) * (ch * 0.40);
-        c.fillStyle = deltas[h] >= 0 ? "rgba(234, 88, 12, 0.36)" : "rgba(37, 99, 235, 0.36)";
-        if (bh >= 0) c.fillRect(xFor(h) - bw / 2, midY - bh, bw, bh);
-        else c.fillRect(xFor(h) - bw / 2, midY, bw, -bh);
+      const N = state.timeStepMin === 15 ? 96 : 24;
+      const stepH = state.timeStepMin === 15 ? 0.25 : 1.0;
+      const vals = new Float32Array(N);
+      const deltas = new Float32Array(N);
+      let maxV = 1, maxD = 1;
+      for (let i = 0; i < N; i++) {
+        vals[i] = evalCurve24(arr, 0, i * stepH);
+        if (vals[i] > maxV) maxV = vals[i];
+      }
+      for (let i = 0; i < N; i++) {
+        deltas[i] = vals[i] - vals[(i + N - 1) % N];
+        if (Math.abs(deltas[i]) > maxD) maxD = Math.abs(deltas[i]);
       }
 
-      // Province total curve
+      const padX = 8, plotW = cw - padX * 2;
+      const xForH = (hf) => padX + (hf / 23.75) * plotW;
+      const midY = ch * 0.56;
+      const bw = Math.max(2, (plotW / N) * 0.62);
+      for (let i = 0; i < N; i++) {
+        const bh = (deltas[i] / maxD) * (ch * 0.40);
+        c.fillStyle = deltas[i] >= 0 ? "rgba(234, 88, 12, 0.36)" : "rgba(37, 99, 235, 0.36)";
+        if (bh >= 0) c.fillRect(xForH(i * stepH) - bw / 2, midY - bh, bw, bh);
+        else c.fillRect(xForH(i * stepH) - bw / 2, midY, bw, -bh);
+      }
+
       const pri = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim() || "#2563eb";
       c.beginPath();
-      for (let h = 0; h < 24; h++) {
-        const x = xFor(h), y = ch - 3 - (arr[h] / maxV) * (ch - 7);
-        if (h === 0) c.moveTo(x, y); else c.lineTo(x, y);
+      for (let i = 0; i < N; i++) {
+        const x = xForH(i * stepH), y = ch - 3 - (vals[i] / maxV) * (ch - 7);
+        if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
       }
-      c.strokeStyle = pri;
-      c.lineWidth = 1.6;
-      c.stroke();
+      c.strokeStyle = pri; c.lineWidth = 1.6; c.stroke();
 
-      // Current hour indicator
-      const hx = xFor(state.hour % 24);
-      c.beginPath();
-      c.moveTo(hx, 0);
-      c.lineTo(hx, ch);
-      c.strokeStyle = "#ea580c";
-      c.lineWidth = 2;
-      c.stroke();
+      const hx = xForH(state.hour % 24);
+      c.beginPath(); c.moveTo(hx, 0); c.lineTo(hx, ch);
+      c.strokeStyle = "#ea580c"; c.lineWidth = 2; c.stroke();
     }
 
-    // -----------------------------------------------------------------------
-    // 8. Animation Loop (Smooth Playback + Fly-To Camera + Pulses)
-    // -----------------------------------------------------------------------
-    let lastTs = 0;
+    let lastTs = 0, uiThrottle = 0;
     function tick(ts) {
       const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.016;
       lastTs = ts;
       let needsRedraw = false;
 
       if (state.playing) {
-        state.hour = (state.hour + dt * 1.45 * state.speed) % 24;
-        const sliderVal = Math.floor(state.hour);
-        const slider = document.getElementById("timeSlider");
-        if (Number(slider.value) !== sliderVal) {
-          slider.value = sliderVal;
-          syncPresetChips(sliderVal);
+        const rate = state.timeStepMin === 15 ? 0.85 : 1.45;
+        state.hour = (state.hour + dt * rate * state.speed) % 24;
+        syncSliderFromHour();
+        uiThrottle += dt;
+        if (uiThrottle >= 0.08) {
+          uiThrottle = 0;
+          updateSidebar();
+          drawTimelineWave();
         }
-        updateSidebar();
-        drawTimelineWave();
         needsRedraw = true;
       }
 
@@ -1711,24 +2393,17 @@
     }
 
     // -----------------------------------------------------------------------
-    // 9. Interactions (Pan/Pinch-Zoom, Search, Filters, Timeline, Keyboard, CSV)
+    // 9. Interactions (Multi-Touch Pinch-Zoom, Search, Filters, Timeline, CSV)
     // -----------------------------------------------------------------------
     const activePointers = new Map();
-    let isDragging = false;
-    let dragMoved = false;
-    let dragStartX = 0, dragStartY = 0;
-    let camStartOx = 0, camStartOy = 0;
-    let pinchStartDist = 0;
-    let pinchStartScale = 1;
-    let pinchStartMidX = 0, pinchStartMidY = 0;
-    let pinchStartOx = 0, pinchStartOy = 0;
+    let isDragging = false, dragMoved = false;
+    let dragStartX = 0, dragStartY = 0, camStartOx = 0, camStartOy = 0;
+    let pinchStartDist = 0, pinchStartScale = 1, pinchStartMidX = 0, pinchStartMidY = 0, pinchStartOx = 0, pinchStartOy = 0;
 
     function getPinchInfo() {
       const pts = Array.from(activePointers.values());
-      const dx = pts[1].x - pts[0].x;
-      const dy = pts[1].y - pts[0].y;
       return {
-        dist: Math.max(1, Math.hypot(dx, dy)),
+        dist: Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y)),
         midX: (pts[0].x + pts[1].x) * 0.5,
         midY: (pts[0].y + pts[1].y) * 0.5,
       };
@@ -1742,39 +2417,28 @@
       state.camTarget = null;
 
       if (activePointers.size === 1) {
-        isDragging = true;
-        dragMoved = false;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        camStartOx = state.cam.ox;
-        camStartOy = state.cam.oy;
+        isDragging = true; dragMoved = false;
+        dragStartX = e.clientX; dragStartY = e.clientY;
+        camStartOx = state.cam.ox; camStartOy = state.cam.oy;
       } else if (activePointers.size === 2) {
-        isDragging = false;
-        dragMoved = true;
+        isDragging = false; dragMoved = true;
         tooltipEl.classList.add("hidden");
         const p = getPinchInfo();
-        pinchStartDist = p.dist;
-        pinchStartScale = state.cam.scale;
-        pinchStartMidX = p.midX;
-        pinchStartMidY = p.midY;
-        pinchStartOx = state.cam.ox;
-        pinchStartOy = state.cam.oy;
+        pinchStartDist = p.dist; pinchStartScale = state.cam.scale;
+        pinchStartMidX = p.midX; pinchStartMidY = p.midY;
+        pinchStartOx = state.cam.ox; pinchStartOy = state.cam.oy;
       }
     });
 
     mapCanvas.addEventListener("pointermove", (e) => {
       const rect = mapCanvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-
+      const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
       if (activePointers.has(e.pointerId)) {
         activePointers.set(e.pointerId, { x: sx, y: sy, cx: e.clientX, cy: e.clientY });
       }
-
       if (activePointers.size >= 2) {
         const p = getPinchInfo();
-        const factor = p.dist / pinchStartDist;
-        const newScale = Math.max(0.035, Math.min(2.6, pinchStartScale * factor));
+        const newScale = Math.max(0.035, Math.min(3.5, pinchStartScale * (p.dist / pinchStartDist)));
         const ratio = newScale / pinchStartScale;
         state.cam.scale = newScale;
         state.cam.ox = p.midX - (pinchStartMidX - pinchStartOx) * ratio;
@@ -1783,10 +2447,8 @@
         renderMap();
         return;
       }
-
       if (isDragging && activePointers.size === 1) {
-        const dx = e.clientX - dragStartX;
-        const dy = e.clientY - dragStartY;
+        const dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
         if (Math.hypot(dx, dy) > 5) dragMoved = true;
         if (dragMoved) {
           state.cam.ox = camStartOx + dx;
@@ -1796,11 +2458,10 @@
           return;
         }
       }
-
       if (e.pointerType === "touch") return;
       const hit = hitTest(sx, sy);
-      if (hit !== state.hoveredId) {
-        state.hoveredId = hit;
+      if (!sameTarget(hit, state.hovered)) {
+        state.hovered = hit;
         renderMap();
       }
       updateTooltip(hit, e.clientX, e.clientY);
@@ -1810,26 +2471,19 @@
       if (!activePointers.has(e.pointerId)) return;
       const wasSingle = activePointers.size === 1;
       activePointers.delete(e.pointerId);
-
       if (activePointers.size === 1) {
-        // Seamlessly resume single-finger pan after lifting one finger from pinch
         const rem = Array.from(activePointers.values())[0];
-        isDragging = true;
-        dragMoved = true;
-        dragStartX = rem.cx;
-        dragStartY = rem.cy;
-        camStartOx = state.cam.ox;
-        camStartOy = state.cam.oy;
+        isDragging = true; dragMoved = true;
+        dragStartX = rem.cx; dragStartY = rem.cy;
+        camStartOx = state.cam.ox; camStartOy = state.cam.oy;
         return;
       }
-
       if (wasSingle && isDragging) {
         isDragging = false;
         if (!dragMoved) {
           const rect = mapCanvas.getBoundingClientRect();
           const hit = hitTest(e.clientX - rect.left, e.clientY - rect.top);
-          if (hit !== -1) selectRegion(hit, state.level, false);
-          else selectRegion(-1);
+          selectTarget(hit, false);
         }
       }
       if (activePointers.size === 0) isDragging = false;
@@ -1837,10 +2491,9 @@
 
     mapCanvas.addEventListener("pointerup", onPointerEnd);
     mapCanvas.addEventListener("pointercancel", onPointerEnd);
-
     mapCanvas.addEventListener("pointerleave", () => {
       if (!isDragging && activePointers.size === 0) {
-        state.hoveredId = -1;
+        state.hovered = null;
         tooltipEl.classList.add("hidden");
         renderMap();
       }
@@ -1850,10 +2503,8 @@
       e.preventDefault();
       state.camTarget = null;
       const rect = mapCanvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const factor = Math.exp(-e.deltaY * 0.0014);
-      const newScale = Math.max(0.035, Math.min(2.6, state.cam.scale * factor));
+      const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+      const newScale = Math.max(0.035, Math.min(3.5, state.cam.scale * Math.exp(-e.deltaY * 0.0014)));
       const ratio = newScale / state.cam.scale;
       state.cam.ox = sx - (sx - state.cam.ox) * ratio;
       state.cam.oy = sy - (sy - state.cam.oy) * ratio;
@@ -1865,7 +2516,7 @@
     function zoomBy(factor) {
       const w = mapStage.clientWidth, h = mapStage.clientHeight;
       const cx = w * 0.5, cy = h * 0.5;
-      const newScale = Math.max(0.035, Math.min(2.6, state.cam.scale * factor));
+      const newScale = Math.max(0.035, Math.min(3.5, state.cam.scale * factor));
       const ratio = newScale / state.cam.scale;
       state.camTarget = {
         scale: newScale,
@@ -1874,8 +2525,8 @@
       };
     }
 
-    document.getElementById("zoomInBtn").addEventListener("click", () => zoomBy(1.45));
-    document.getElementById("zoomOutBtn").addEventListener("click", () => zoomBy(1 / 1.45));
+    document.getElementById("zoomInBtn").addEventListener("click", () => zoomBy(1.5));
+    document.getElementById("zoomOutBtn").addEventListener("click", () => zoomBy(1 / 1.5));
     document.getElementById("zoomResetBtn").addEventListener("click", () => {
       state.filterSgg = -1;
       document.getElementById("sggFilter").value = "";
@@ -1903,21 +2554,23 @@
       });
     });
 
+    function switchLevel(newLvl) {
+      state.level = newLvl;
+      state.hovered = null;
+      state.selected = null;
+      document.getElementById("detailPanel").classList.add("hidden");
+      document.getElementById("overviewPanel").classList.remove("hidden");
+      document.querySelectorAll("[data-level]").forEach((b) => b.classList.toggle("active", b.dataset.level === newLvl));
+      updateScaleBar();
+      updateLegend();
+      updateSidebar();
+      renderMap();
+    }
+
     document.querySelectorAll("[data-level]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        state.level = btn.dataset.level;
-        state.hoveredId = -1;
-        state.selectedId = -1;
-        document.getElementById("detailPanel").classList.add("hidden");
-        document.getElementById("overviewPanel").classList.remove("hidden");
-        document.querySelectorAll("[data-level]").forEach((b) => b.classList.toggle("active", b === btn));
-        updateLegend();
-        updateSidebar();
-        renderMap();
-      });
+      btn.addEventListener("click", () => switchLevel(btn.dataset.level));
     });
 
-    // Rank tabs
     document.querySelectorAll("[data-rank]").forEach((btn) => {
       btn.addEventListener("click", () => {
         state.rankTab = btn.dataset.rank;
@@ -1927,20 +2580,29 @@
     });
 
     document.getElementById("rankList").addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-pick]");
-      if (btn) selectRegion(Number(btn.dataset.pick), state.level, true);
+      const btn = e.target.closest("[data-pick-id]");
+      if (btn) selectTarget({ kind: btn.dataset.pickKind, id: Number(btn.dataset.pickId) }, true);
     });
 
     document.getElementById("detSiblingList").addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-sib]");
-      if (btn) {
-        if (state.level !== "dong") {
-          state.level = "dong";
-          document.querySelectorAll("[data-level]").forEach((b) => b.classList.toggle("active", b.dataset.level === "dong"));
-          updateLegend();
-        }
-        selectRegion(Number(btn.dataset.sib), "dong", true);
+      const btn = e.target.closest("[data-sib-id]");
+      if (!btn) return;
+      const kind = btn.dataset.sibKind;
+      const id = Number(btn.dataset.sibId);
+      if (kind === "micro") {
+        selectTarget({ kind: "micro", id, parentIdx: Number(btn.dataset.sibParent), subIdx: Number(btn.dataset.sibSub) }, false);
+      } else if (kind === "dong" && state.level === "sgg") {
+        switchLevel("dong");
+        selectTarget({ kind: "dong", id }, true);
+      } else {
+        selectTarget({ kind, id }, true);
       }
+    });
+
+    document.getElementById("jumpParentDongBtn").addEventListener("click", (e) => {
+      const did = Number(e.currentTarget.dataset.dongId);
+      switchLevel("dong");
+      selectTarget({ kind: "dong", id: did }, true);
     });
 
     function openMobileSidebar() {
@@ -1954,11 +2616,10 @@
       sb.classList.remove("flex");
     }
 
-    document.getElementById("backToOverviewBtn").addEventListener("click", () => selectRegion(-1));
+    document.getElementById("backToOverviewBtn").addEventListener("click", () => selectTarget(null));
     document.getElementById("toggleSidebarBtn").addEventListener("click", () => {
       const sb = document.getElementById("sidebar");
-      if (sb.classList.contains("hidden")) openMobileSidebar();
-      else closeMobileSidebar();
+      if (sb.classList.contains("hidden")) openMobileSidebar(); else closeMobileSidebar();
       setTimeout(resizeCanvas, 20);
     });
     document.getElementById("closeMobileSidebarBtn").addEventListener("click", closeMobileSidebar);
@@ -1972,12 +2633,15 @@
       el.addEventListener("click", () => {
         state.layers[key] = !state.layers[key];
         el.classList.toggle("active", state.layers[key]);
+        if (key === "micro") { updateScaleBar(); updateLegend(); }
         renderMap();
       });
     }
+    bindLayerToggle("layerMicro", "micro");
     bindLayerToggle("layerPulse", "pulse");
     bindLayerToggle("layerHighway", "highway");
     bindLayerToggle("layerLandmarks", "landmarks");
+    bindLayerToggle("layerDongBorder", "dongBorder");
     bindLayerToggle("layerSggBorder", "sggBorder");
 
     // SGG Filter Dropdown
@@ -1985,7 +2649,7 @@
     SGGS.forEach((s) => {
       const opt = document.createElement("option");
       opt.value = String(s.id);
-      opt.textContent = `${s.name} (${s.dongs.length}개)`;
+      opt.textContent = `${s.name} (${s.dongs.length}동)`;
       sggSelect.appendChild(opt);
     });
     sggSelect.addEventListener("change", () => {
@@ -2001,7 +2665,7 @@
       renderMap();
     });
 
-    // Instant Search
+    // Instant Search (Searches 129 Sub-Anchors + 47 SGGs + 602 Dongs!)
     const searchInput = document.getElementById("searchInput");
     const searchResults = document.getElementById("searchResults");
     const clearSearchBtn = document.getElementById("clearSearchBtn");
@@ -2009,27 +2673,33 @@
     function renderSearch(q) {
       const term = q.trim().toLowerCase();
       clearSearchBtn.classList.toggle("hidden", !term);
-      if (!term) {
-        searchResults.classList.add("hidden");
-        return;
-      }
+      if (!term) { searchResults.classList.add("hidden"); return; }
+
       const matches = [];
+      for (let i = 0; i < ANCHORS.length; i++) {
+        const a = ANCHORS[i];
+        if (a[5].toLowerCase().includes(term)) {
+          matches.push({ kind: "anchor", id: i, title: a[5], sub: `핵심 거점 · ${TYPE_LABELS[TYPE_KEYS[a[2]]]} (385m 확대)` });
+        }
+        if (matches.length >= 8) break;
+      }
       for (const s of SGGS) {
         if (s.name.toLowerCase().includes(term)) {
-          matches.push({ level: "sgg", id: s.id, title: s.name, sub: `시·군·구 · ${s.dongs.length}개 행정동` });
+          matches.push({ kind: "sgg", id: s.id, title: s.name, sub: `시·군·구 · ${s.dongs.length}개 행정동` });
         }
       }
       for (const d of DONGS) {
-        if (d.nm.toLowerCase().includes(term) || d.fullName.toLowerCase().includes(term) || (d.anc && d.anc.toLowerCase().includes(term))) {
-          matches.push({ level: "dong", id: d.id, title: d.nm, sub: `${d.sggName}${d.anc ? " · " + d.anc : ""}` });
+        if (d.nm.toLowerCase().includes(term) || d.fullName.toLowerCase().includes(term)) {
+          matches.push({ kind: "dong", id: d.id, title: d.nm, sub: `${d.sggName}${d.anc ? " · " + d.anc : ""}` });
         }
         if (matches.length >= 24) break;
       }
+
       if (matches.length === 0) {
-        searchResults.innerHTML = `<div class="px-3 py-2.5 text-[var(--muted-foreground)]">일치하는 지역이 없습니다.</div>`;
+        searchResults.innerHTML = `<div class="px-3 py-2.5 text-[var(--muted-foreground)]">일치하는 지역 또는 거점이 없습니다.</div>`;
       } else {
         searchResults.innerHTML = matches.map((m) => `
-          <button data-sr-level="${m.level}" data-sr-id="${m.id}" class="rank-row w-full text-left px-3 py-2 border-b border-[var(--card-border)] last:border-b-0 cursor-pointer flex items-center justify-between gap-2">
+          <button data-sr-kind="${m.kind}" data-sr-id="${m.id}" class="rank-row w-full text-left px-3 py-2 border-b border-[var(--card-border)] last:border-b-0 cursor-pointer flex items-center justify-between gap-2">
             <span class="font-medium truncate">${m.title}</span>
             <span class="text-[12px] text-[var(--muted-foreground)] truncate">${m.sub}</span>
           </button>`).join("");
@@ -2038,38 +2708,64 @@
     }
 
     searchInput.addEventListener("input", () => renderSearch(searchInput.value));
-    clearSearchBtn.addEventListener("click", () => {
-      searchInput.value = "";
-      renderSearch("");
-    });
+    clearSearchBtn.addEventListener("click", () => { searchInput.value = ""; renderSearch(""); });
     searchResults.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-sr-id]");
       if (!btn) return;
-      const lvl = btn.dataset.srLevel;
+      const kind = btn.dataset.srKind;
       const id = Number(btn.dataset.srId);
-      if (state.level !== lvl) {
-        state.level = lvl;
-        document.querySelectorAll("[data-level]").forEach((b) => b.classList.toggle("active", b.dataset.level === lvl));
-        updateLegend();
-      }
       state.filterSgg = -1;
       sggSelect.value = "";
       searchResults.classList.add("hidden");
-      selectRegion(id, lvl, true);
+
+      if (kind === "anchor") {
+        const a = ANCHORS[id];
+        if (state.level !== "cell") switchLevel("cell");
+        const cid = hitTestHex1km(a[0], a[1]);
+        if (cid !== -1) selectTarget({ kind: "cell", id: cid }, true);
+        else fitCameraToBBox([a[0] - 280, a[1] - 280, a[0] + 280, a[1] + 280], true, 0.14);
+      } else if (kind === "sgg") {
+        if (state.level === "cell") {
+          fitCameraToBBox(SGGS[id].bbox, true, 0.14);
+        } else {
+          if (state.level !== "sgg") switchLevel("sgg");
+          selectTarget({ kind: "sgg", id }, true);
+        }
+      } else {
+        // Dong search: if currently in cell mode, zoom straight into that dong's 1km/385m cells and select its center cell!
+        const d = DONGS[id];
+        if (state.level === "cell") {
+          const cid = hitTestHex1km(d.cx, d.cy);
+          const b = d.bbox;
+          const cx = (b[0] + b[2]) * 0.5, cy = (b[1] + b[3]) * 0.5;
+          const span = Math.max(b[2] - b[0], b[3] - b[1], 320);
+          fitCameraToBBox([cx - span * 0.7, cy - span * 0.7, cx + span * 0.7, cy + span * 0.7], true, 0.14);
+          if (cid !== -1) selectTarget({ kind: "cell", id: cid }, false);
+        } else {
+          if (state.level !== "dong") switchLevel("dong");
+          selectTarget({ kind: "dong", id }, true);
+        }
+      }
       updateSidebar();
     });
     document.addEventListener("click", (e) => {
-      if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-        searchResults.classList.add("hidden");
-      }
+      if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) searchResults.classList.add("hidden");
     });
 
-    // Timeline Controls
+    // Timeline Controls (15분 96구간 & 1시간 24구간)
+    const timeSlider = document.getElementById("timeSlider");
+
+    function syncSliderFromHour() {
+      const idx = state.timeStepMin === 15
+        ? Math.round(((state.hour % 24) + 24) % 24 * 4) % 96
+        : Math.floor(((state.hour % 24) + 24) % 24);
+      timeSlider.value = String(idx);
+      syncPresetChips(state.hour);
+    }
+
     function setHour(h) {
       state.hour = ((h % 24) + 24) % 24;
-      const intH = Math.floor(state.hour);
-      document.getElementById("timeSlider").value = intH;
-      syncPresetChips(intH);
+      syncSliderFromHour();
       updateSidebar();
       drawTimelineWave();
       renderMap();
@@ -2077,9 +2773,24 @@
 
     function syncPresetChips(h) {
       document.querySelectorAll("[data-preset]").forEach((b) => {
-        b.classList.toggle("active", Number(b.dataset.preset) === h);
+        b.classList.toggle("active", Math.abs(Number(b.dataset.preset) - h) < 0.13);
       });
     }
+
+    document.querySelectorAll("[data-tstep]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.timeStepMin = Number(btn.dataset.tstep);
+        document.querySelectorAll("[data-tstep]").forEach((b) => b.classList.toggle("active", b === btn));
+        timeSlider.max = state.timeStepMin === 15 ? "95" : "23";
+        if (state.timeStepMin === 60) state.hour = Math.round(state.hour) % 24;
+        else state.hour = Math.round(state.hour * 4) / 4;
+        syncSliderFromHour();
+        updateLegend();
+        updateSidebar();
+        drawTimelineWave();
+        renderMap();
+      });
+    });
 
     function togglePlay() {
       state.playing = !state.playing;
@@ -2088,57 +2799,68 @@
     }
 
     document.getElementById("playBtn").addEventListener("click", togglePlay);
-    document.getElementById("prevHourBtn").addEventListener("click", () => { if (state.playing) togglePlay(); setHour(Math.floor(state.hour) - 1); });
-    document.getElementById("nextHourBtn").addEventListener("click", () => { if (state.playing) togglePlay(); setHour(Math.floor(state.hour) + 1); });
+    document.getElementById("prevStepBtn").addEventListener("click", () => {
+      if (state.playing) togglePlay();
+      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
+      setHour(Math.round((state.hour - step) / step) * step);
+    });
+    document.getElementById("nextStepBtn").addEventListener("click", () => {
+      if (state.playing) togglePlay();
+      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
+      setHour(Math.round((state.hour + step) / step) * step);
+    });
 
     const speeds = [0.5, 1.0, 2.0];
     document.getElementById("speedBtn").addEventListener("click", (e) => {
-      const idx = (speeds.indexOf(state.speed) + 1) % speeds.length;
-      state.speed = speeds[idx];
+      state.speed = speeds[(speeds.indexOf(state.speed) + 1) % speeds.length];
       e.currentTarget.textContent = state.speed.toFixed(1) + "×";
     });
 
-    document.getElementById("timeSlider").addEventListener("input", (e) => {
+    timeSlider.addEventListener("input", (e) => {
       if (state.playing) togglePlay();
-      setHour(Number(e.target.value));
+      const v = Number(e.target.value);
+      setHour(state.timeStepMin === 15 ? v * 0.25 : v);
     });
 
     document.querySelectorAll("[data-preset]").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (state.playing) togglePlay();
-        setHour(Number(btn.dataset.preset));
+        let h = Number(btn.dataset.preset);
+        if (state.timeStepMin === 60) h = Math.round(h);
+        setHour(h);
       });
     });
 
-    // Click on bottom waveform or detail 24h chart to jump hour
     waveCanvas.addEventListener("click", (e) => {
       const rect = waveCanvas.getBoundingClientRect();
       const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - 8) / (rect.width - 16)));
       if (state.playing) togglePlay();
-      setHour(Math.round(frac * 23));
+      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
+      setHour(Math.round((frac * 23.75) / step) * step);
     });
 
     document.getElementById("detailChart").addEventListener("click", (e) => {
       const rect = e.currentTarget.getBoundingClientRect();
-      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - 32) / (rect.width - 42)));
+      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - 34) / (rect.width - 44)));
       if (state.playing) togglePlay();
-      setHour(Math.round(frac * 23));
+      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
+      setHour(Math.round((frac * 23.75) / step) * step);
     });
 
-    // Keyboard shortcuts
     window.addEventListener("keydown", (e) => {
       if (document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+      const step = state.timeStepMin === 15 ? 0.25 : 1.0;
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
-      else if (e.key === "ArrowLeft") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.floor(state.hour) - 1); }
-      else if (e.key === "ArrowRight") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.floor(state.hour) + 1); }
-      else if (e.key === "Escape") { selectRegion(-1); document.getElementById("uploadModal").classList.add("hidden"); }
-      else if (e.key === "+" || e.key === "=") zoomBy(1.35);
-      else if (e.key === "-") zoomBy(1 / 1.35);
+      else if (e.key === "ArrowLeft") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.round((state.hour - step) / step) * step); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); if (state.playing) togglePlay(); setHour(Math.round((state.hour + step) / step) * step); }
+      else if (e.key === "Escape") { selectTarget(null); document.getElementById("uploadModal").classList.add("hidden"); }
+      else if (e.key === "+" || e.key === "=") zoomBy(1.4);
+      else if (e.key === "-") zoomBy(1 / 1.4);
       else if (e.key.toLowerCase() === "r") resetCamera(true);
     });
 
     // -----------------------------------------------------------------------
-    // 10. Real Data CSV / JSON Upload & Export
+    // 10. Real Data CSV / JSON Upload & Export (Propagates to 11,286 Cells!)
     // -----------------------------------------------------------------------
     const uploadModal = document.getElementById("uploadModal");
     const uploadStatus = document.getElementById("uploadStatus");
@@ -2154,8 +2876,7 @@
     dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.style.borderColor = "var(--primary)"; });
     dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = ""; });
     dropZone.addEventListener("drop", (e) => {
-      e.preventDefault();
-      dropZone.style.borderColor = "";
+      e.preventDefault(); dropZone.style.borderColor = "";
       if (e.dataTransfer.files[0]) handleUploadFile(e.dataTransfer.files[0]);
     });
     fileInput.addEventListener("change", () => {
@@ -2163,13 +2884,23 @@
       fileInput.value = "";
     });
 
-    // Lookup maps for matching uploaded data
     const dongByCd = new Map();
     const dongByFull = new Map();
     for (const d of DONGS) {
       dongByCd.set(String(d.cd).trim(), d);
       dongByCd.set(String(d.cd).slice(0, 8), d);
       dongByFull.set((d.sggName + "|" + d.nm).replace(/\s+/g, ""), d);
+    }
+
+    function refreshAllCellScales() {
+      for (const d of DONGS) {
+        for (let h = 0; h < 24; h++) {
+          d.scaleRatioWd[h] = d.origWd[h] > 0.01 ? d.wd[h] / d.origWd[h] : 1;
+          d.scaleRatioWe[h] = d.origWe[h] > 0.01 ? d.we[h] / d.origWe[h] : 1;
+        }
+      }
+      microCache.clear();
+      buildHexCells();
     }
 
     function applyUploadedRecords(records, filename) {
@@ -2187,27 +2918,24 @@
         if (isNaN(h) || h < 0 || h > 23 || isNaN(v) || v < 0) continue;
         const dt = String(r.day_type || "weekday").toLowerCase();
         const isWe = dt.includes("end") || dt === "we" || dt === "주말";
-        if (isWe) {
-          d.we[h] = v;
-        } else {
-          d.wd[h] = v;
-          if (!hasWeekend) d.we[h] = v;
-        }
+        if (isWe) d.we[h] = v;
+        else { d.wd[h] = v; if (!hasWeekend) d.we[h] = v; }
         matchedDongs.add(d.id);
         updatedCells++;
       }
 
       if (matchedDongs.size === 0) {
         uploadStatus.classList.remove("hidden");
-        uploadStatus.innerHTML = `<span class="text-[#dc2626] font-semibold">매칭된 행정동이 없습니다.</span> 컬럼명(<code>adm_cd</code> 또는 <code>sggnm, dongnm</code>, <code>hour</code>, <code>traffic_gbps</code>)을 확인해 주세요.`;
+        uploadStatus.innerHTML = `<span class="text-[#dc2626] font-semibold">매칭된 행정동이 없습니다.</span> 컬럼명을 확인해 주세요.`;
         return;
       }
 
       recomputeAggregates();
+      refreshAllCellScales();
       state.customDataName = filename;
-      document.getElementById("dataSourceTag").textContent = `사용자 데이터 · ${matchedDongs.size}/${DONGS.length} 동`;
+      document.getElementById("dataSourceTag").textContent = `사용자 데이터 · ${matchedDongs.size}/602 동`;
       uploadStatus.classList.remove("hidden");
-      uploadStatus.innerHTML = `<span class="text-[#16a34a] font-semibold">적용 완료!</span> ${matchedDongs.size}개 행정동 (${updatedCells.toLocaleString()}개 시간대 셀)이 지도에 반영되었습니다.`;
+      uploadStatus.innerHTML = `<span class="text-[#16a34a] font-semibold">적용 완료!</span> ${matchedDongs.size}개 행정동 (${updatedCells.toLocaleString()}개 셀) 및 하위 11,286개 1km 셀에 반영되었습니다.`;
       updateLegend();
       updateSidebar();
       drawTimelineWave();
@@ -2221,8 +2949,7 @@
         try {
           if (file.name.toLowerCase().endsWith(".json")) {
             const parsed = JSON.parse(text);
-            const arr = Array.isArray(parsed) ? parsed : (parsed.data || parsed.rows || []);
-            applyUploadedRecords(arr, file.name);
+            applyUploadedRecords(Array.isArray(parsed) ? parsed : (parsed.data || parsed.rows || []), file.name);
           } else {
             const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
             if (lines.length < 2) throw new Error("데이터 행이 부족합니다.");
@@ -2248,49 +2975,36 @@
       const rows = ["adm_cd,sggnm,dongnm,day_type,hour,traffic_gbps"];
       for (const d of DONGS) {
         for (const [dk, arr] of [["weekday", d.wd], ["weekend", d.we]]) {
-          for (let h = 0; h < 24; h++) {
-            rows.push(`${d.cd},${d.sggName},${d.nm},${dk},${h},${arr[h]}`);
-          }
+          for (let h = 0; h < 24; h++) rows.push(`${d.cd},${d.sggName},${d.nm},${dk},${h},${arr[h]}`);
         }
       }
       const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = "gyeonggi_mobile_traffic_602dongs.csv";
-      a.click();
+      a.href = url; a.download = "gyeonggi_mobile_traffic_602dongs.csv"; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
 
     document.getElementById("resetDataBtn").addEventListener("click", () => {
-      for (const d of DONGS) {
-        d.wd = d.origWd.slice();
-        d.we = d.origWe.slice();
-      }
+      for (const d of DONGS) { d.wd = d.origWd.slice(); d.we = d.origWe.slice(); }
       recomputeAggregates();
+      refreshAllCellScales();
       state.customDataName = null;
-      document.getElementById("dataSourceTag").textContent = "602 행정동 · 시뮬레이션";
+      document.getElementById("dataSourceTag").textContent = `${HEX_COUNT.toLocaleString()} 셀 · 602 동`;
       uploadStatus.classList.remove("hidden");
-      uploadStatus.innerHTML = `<span class="font-semibold">내장 경기도 모델 데이터로 복원되었습니다.</span>`;
-      updateLegend();
-      updateSidebar();
-      drawTimelineWave();
-      renderMap();
+      uploadStatus.innerHTML = `<span class="font-semibold">내장 경기도 초정밀 모델 데이터로 복원되었습니다.</span>`;
+      updateLegend(); updateSidebar(); drawTimelineWave(); renderMap();
     });
 
-    // Live theme change sync
     window.addEventListener("themechange", () => {
-      updateLegend();
-      drawTimelineWave();
-      if (state.selectedId !== -1) updateDetailInspector();
+      updateLegend(); drawTimelineWave();
+      if (state.selected) updateDetailInspector();
       renderMap();
     });
 
-    // Resize observer
     const ro = new ResizeObserver(() => {
-      resizeCanvas();
-      drawTimelineWave();
-      if (state.selectedId !== -1) updateDetailInspector();
+      resizeCanvas(); drawTimelineWave();
+      if (state.selected) updateDetailInspector();
     });
     ro.observe(mapStage);
 
