@@ -1001,9 +1001,9 @@
           anc: meta.anc || d.anc, g5: meta.g5, mix: meta.mix, wd, we, avgWd: meta.avgWd, avgWe: meta.avgWe,
         };
       }
-      if (microCache.size > 1600) {
+      if (microCache.size > 8000) {
         let n = 0;
-        for (const key of microCache.keys()) { microCache.delete(key); if (++n >= 400) break; }
+        for (const key of microCache.keys()) { microCache.delete(key); if (++n >= 2000) break; }
       }
       microCache.set(parentIdx, children);
       return children;
@@ -1349,11 +1349,12 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, sidoBuf); gl.bufferData(gl.ARRAY_BUFFER, cellSidoFloat, gl.STATIC_DRAW);
       gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(3, 1);
 
-      // Dynamic 800m micro-cell VAO
-      const MAX_MICRO = 10000;
-      const microXYData = new Float32Array(MAX_MICRO * 2);
-      const microValData = new Float32Array(MAX_MICRO);
-      const microSidoData = new Float32Array(MAX_MICRO);
+      // Dynamic 800m micro-cell VAO (auto-grows on demand so wide/4K viewports never clip!)
+      let microCap = 35000;
+      let microXYData = new Float32Array(microCap * 2);
+      let microValData = new Float32Array(microCap);
+      let microSidoData = new Float32Array(microCap);
+      const visibleParents = new Int32Array(HEX_COUNT);
 
       const vaoMicro = gl.createVertexArray();
       gl.bindVertexArray(vaoMicro);
@@ -1361,17 +1362,28 @@
       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
       const centerMicroBuf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, centerMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, MAX_MICRO * 8, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, centerMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, microCap * 8, gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(1, 1);
 
       const valMicroBuf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, valMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, MAX_MICRO * 4, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, valMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, microCap * 4, gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(2, 1);
 
       const sidoMicroBuf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, sidoMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, MAX_MICRO * 4, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, sidoMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, microCap * 4, gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(3, 1);
       gl.bindVertexArray(null);
+
+      function ensureMicroCapacity(needed) {
+        if (needed <= microCap) return;
+        microCap = Math.max(needed, Math.ceil(microCap * 1.5));
+        microXYData = new Float32Array(microCap * 2);
+        microValData = new Float32Array(microCap);
+        microSidoData = new Float32Array(microCap);
+        gl.bindBuffer(gl.ARRAY_BUFFER, centerMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, microCap * 8, gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, valMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, microCap * 4, gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, sidoMicroBuf); gl.bufferData(gl.ARRAY_BUFFER, microCap * 4, gl.DYNAMIC_DRAW);
+      }
 
       const rampTex = gl.createTexture();
       const rampPixels = new Uint8Array(256 * 4);
@@ -1442,18 +1454,29 @@
         drawMicro(w, h, scale, ox, oy, filterSido, light, domain) {
           const viewMinX = -ox / scale - HEX_R * 2, viewMinY = -oy / scale - HEX_R * 2;
           const viewMaxX = (w - ox) / scale + HEX_R * 2, viewMaxY = (h - oy) / scale + HEX_R * 2;
+          let visCount = 0;
+          for (let i = 0; i < HEX_COUNT; i++) {
+            const px = cellXY[i * 2], py = cellXY[i * 2 + 1];
+            if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
+            visibleParents[visCount++] = i;
+          }
+
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          if (visCount === 0) return;
+
+          ensureMicroCapacity(visCount * 7);
           const bCur = cubicBasis(state.hour), bPrev = cubicBasis(state.hour - getDeltaStepHours());
           const dayKey = state.day, mode = state.metric, useLive = liveState.enabled;
           let count = 0;
 
-          for (let i = 0; i < HEX_COUNT; i++) {
-            const px = cellXY[i * 2], py = cellXY[i * 2 + 1];
-            if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
+          for (let v = 0; v < visCount; v++) {
+            const i = visibleParents[v];
             const children = getMicroChildren(i);
             const sdF = cellSidoFloat[i];
             const mulC = useLive ? liveBurstMul[i] : 1, mulP = useLive ? liveBurstPrev[i] : 1;
             for (let k = 0; k < 7; k++) {
-              if (count >= MAX_MICRO) break;
               const mc = children[k], arr = mc[dayKey];
               const cur = evalBasis(arr, 0, bCur) * mulC;
               const prev = evalBasis(arr, 0, bPrev) * mulP;
@@ -1467,13 +1490,7 @@
               microSidoData[count] = sdF;
               count++;
             }
-            if (count >= MAX_MICRO) break;
           }
-
-          gl.viewport(0, 0, canvas.width, canvas.height);
-          gl.clearColor(0, 0, 0, 0);
-          gl.clear(gl.COLOR_BUFFER_BIT);
-          if (count === 0) return;
 
           gl.bindBuffer(gl.ARRAY_BUFFER, centerMicroBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, microXYData.subarray(0, count * 2));
           gl.bindBuffer(gl.ARRAY_BUFFER, valMicroBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, microValData.subarray(0, count));
