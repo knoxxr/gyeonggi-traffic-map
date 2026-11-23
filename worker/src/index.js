@@ -213,7 +213,84 @@ async function pushToGasSheet(env, kst, data) {
   }
 }
 
-async function saveSnapshotToKv(kv, kst, mergedArray) {
+// ============================================================================
+// Cloudflare Radar API — 대한민국(KR) 실시간 모바일/인터넷 트래픽 지수 (3 subrequests)
+// Token 권한: Account > Radar > Read (무료)
+// ============================================================================
+function analyzeRadarSeries(seriesObj) {
+  const vals = (seriesObj?.values || []).map((v) => Number(v)).filter((v) => !isNaN(v));
+  const ts = seriesObj?.timestamps || [];
+  if (vals.length === 0) return null;
+  const last = vals[vals.length - 1];
+  const prev = vals.length >= 2 ? vals[vals.length - 2] : last;
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const idx = Number((last * 100).toFixed(1));
+  const deltaPct = prev > 0.0001 ? Number((((last - prev) / prev) * 100).toFixed(1)) : 0;
+  const vsAvgPct = avg > 0.0001 ? Number((((last - avg) / avg) * 100).toFixed(1)) : 0;
+  // 24~32개 포인트로 다운샘플링한 스파크라인 (0~100 정수)
+  const step = Math.max(1, Math.floor(vals.length / 28));
+  const spark = [];
+  for (let i = 0; i < vals.length; i += step) spark.push(Math.round(vals[i] * 100));
+  if (spark[spark.length - 1] !== Math.round(last * 100)) spark.push(Math.round(last * 100));
+  return { idx, deltaPct, vsAvgPct, avgRatio: avg > 0.0001 ? last / avg : 1, lastTs: ts[ts.length - 1] || "", spark };
+}
+
+async function fetchCloudflareRadarKr(env, kst) {
+  const token = (env.CF_RADAR_TOKEN || "").trim();
+  if (!token) return null;
+  const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+  const base = "https://api.cloudflare.com/client/v4/radar";
+  try {
+    const [rMob, rDev, rNet] = await Promise.all([
+      fetch(`${base}/http/timeseries?location=KR&dateRange=1d&aggInterval=15m&deviceType=MOBILE&name=mobile`, { headers, cf: { cacheTtl: 300 } }),
+      fetch(`${base}/http/summary/DEVICE_TYPE?location=KR&dateRange=1d`, { headers, cf: { cacheTtl: 300 } }),
+      fetch(`${base}/netflows/timeseries?location=KR&dateRange=1d&aggInterval=15m&name=kr`, { headers, cf: { cacheTtl: 300 } }),
+    ]);
+
+    let mobStats = null, netStats = null, mobShare = 0, deskShare = 0;
+    if (rMob.ok) {
+      const j = await rMob.json();
+      mobStats = analyzeRadarSeries(j?.result?.mobile || j?.result?.serie_0);
+    }
+    if (rNet.ok) {
+      const j = await rNet.json();
+      netStats = analyzeRadarSeries(j?.result?.kr || j?.result?.serie_0);
+    }
+    if (rDev.ok) {
+      const j = await rDev.json();
+      const s = j?.result?.summary_0 || {};
+      const m = Number(s.mobile ?? s.MOBILE ?? 0);
+      const d = Number(s.desktop ?? s.DESKTOP ?? 0);
+      const tot = m + d;
+      if (tot > 0) {
+        mobShare = Number(((m / tot) * 100).toFixed(1));
+        deskShare = Number((100 - mobShare).toFixed(1));
+      }
+    }
+    if (!mobStats && !netStats && mobShare === 0) return null;
+
+    const ratio = mobStats ? mobStats.avgRatio : (netStats ? netStats.avgRatio : 1);
+    const scaleFactor = Number(Math.max(0.78, Math.min(1.32, 0.8 + ratio * 0.2)).toFixed(3));
+    return {
+      provider: "Cloudflare Radar",
+      location: "KR",
+      updated_at: kst.full,
+      mobile_index: mobStats ? mobStats.idx : 0,
+      mobile_delta_pct: mobStats ? mobStats.deltaPct : 0,
+      mobile_vs_avg_pct: mobStats ? mobStats.vsAvgPct : 0,
+      netflow_index: netStats ? netStats.idx : 0,
+      netflow_delta_pct: netStats ? netStats.deltaPct : 0,
+      mobile_share_pct: mobShare,
+      desktop_share_pct: deskShare,
+      scale_factor: scaleFactor,
+      sparkline: mobStats?.spark || netStats?.spark || [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function saveSnapshotToKv(kv, kst, mergedArray, radarObj) {
   const sorted = sortRecords(mergedArray);
   const summary = summarize(sorted);
 
@@ -253,6 +330,7 @@ async function saveSnapshotToKv(kv, kst, mergedArray) {
     mode: "latest",
     updated_at: kst.full,
     summary,
+    radar: radarObj || null,
     count: sorted.length,
     dates: datesList,
     data: sorted,
@@ -269,27 +347,48 @@ async function collectScheduled(env, forcedMode) {
   const kv = env.TRAFFIC_KV;
 
   if (mode === "full") {
-    // Paid 플랜 또는 수동 전체 수집: 서울 121 + 전국 ITS 44 일괄 수집
-    const seoulData = seoulKey ? await runPool(SEOUL_121_POIS, 20, (p) => fetchOneSeoulPoi(p, seoulKey, kst.full)) : [];
-    const itsData = itsKey ? await runPool(NATIONWIDE_42_ITS, 16, (h) => fetchOneItsHub(h, itsKey, kst.full)) : [];
+    // Paid 플랜 또는 수동 전체 수집: 서울 121 + 전국 ITS 44 + Radar KR 일괄 수집
+    const [seoulData, itsData, radar] = await Promise.all([
+      seoulKey ? runPool(SEOUL_121_POIS, 20, (p) => fetchOneSeoulPoi(p, seoulKey, kst.full)) : [],
+      itsKey ? runPool(NATIONWIDE_42_ITS, 16, (h) => fetchOneItsHub(h, itsKey, kst.full)) : [],
+      fetchCloudflareRadarKr(env, kst),
+    ]);
     const all = sortRecords([...seoulData, ...itsData]);
-    if (kv) await saveSnapshotToKv(kv, kst, all);
+    if (kv) {
+      if (radar) await kv.put("radar_latest", JSON.stringify(radar), { expirationTtl: 1800 });
+      await saveSnapshotToKv(kv, kst, all, radar);
+    }
     const gasPushed = await pushToGasSheet(env, kst, all);
-    return { mode: "full", updated_at: kst.full, ...summarize(all), gas_pushed: gasPushed };
+    return { mode: "full", updated_at: kst.full, ...summarize(all), radar_ok: Boolean(radar), gas_pushed: gasPushed };
   }
 
   // Free Tier 안전 샤드 순환 수집 (매 호출 <= 44 subrequests!)
   let shardIdx = 0;
   let mergedMap = {};
+  let radar = null;
   if (kv) {
     shardIdx = Number((await kv.get("shard_cursor")) || 0) % 4;
     mergedMap = (await kv.get("latest_map", "json")) || {};
+    radar = await kv.get("radar_latest", "json");
   }
 
   const task = getShardTasks(shardIdx);
   let fetched = [];
   if (task.type === "seoul" && seoulKey) {
-    fetched = await runPool(task.items, 12, (p) => fetchOneSeoulPoi(p, seoulKey, kst.full));
+    // Shard 0에서만 Cloudflare Radar 3건 동시 호출 (41 + 3 = 44 <= 50)
+    if (shardIdx === 0 && env.CF_RADAR_TOKEN) {
+      const [sRes, rRes] = await Promise.all([
+        runPool(task.items, 12, (p) => fetchOneSeoulPoi(p, seoulKey, kst.full)),
+        fetchCloudflareRadarKr(env, kst),
+      ]);
+      fetched = sRes;
+      if (rRes) {
+        radar = rRes;
+        if (kv) await kv.put("radar_latest", JSON.stringify(radar), { expirationTtl: 1800 });
+      }
+    } else {
+      fetched = await runPool(task.items, 12, (p) => fetchOneSeoulPoi(p, seoulKey, kst.full));
+    }
   } else if (task.type === "its" && itsKey) {
     fetched = await runPool(task.items, 12, (h) => fetchOneItsHub(h, itsKey, kst.full));
   }
@@ -303,18 +402,17 @@ async function collectScheduled(env, forcedMode) {
   if (kv) {
     await kv.put("latest_map", JSON.stringify(mergedMap));
     await kv.put("shard_cursor", String(nextShard));
-    // 마지막 샤드(3) 완료 시 또는 최초 수집 시 최신/히스토리 저장 + GAS 전달
     if (shardIdx === 3 || !(await kv.get("latest_payload"))) {
-      await saveSnapshotToKv(kv, kst, mergedList);
+      await saveSnapshotToKv(kv, kst, mergedList, radar);
       gasPushed = await pushToGasSheet(env, kst, sortRecords(mergedList));
     } else {
-      // 중간 샤드도 latest_payload 즉시 반영
       const existing = (await kv.get("latest_payload", "json")) || { dates: [] };
       const sorted = sortRecords(mergedList);
       await kv.put("latest_payload", JSON.stringify({
         mode: "latest",
         updated_at: kst.full,
         summary: summarize(sorted),
+        radar: radar || existing.radar || null,
         count: sorted.length,
         dates: existing.dates || [],
         data: sorted,
@@ -327,12 +425,13 @@ async function collectScheduled(env, forcedMode) {
     shard: shardIdx,
     fetched: fetched.length,
     merged_total: mergedList.length,
+    radar_ok: Boolean(radar),
     updated_at: kst.full,
     gas_pushed: gasPushed,
   };
 }
 
-// KV 미연결 시 즉석 하이브리드 수집 (Free Tier 50 한도 내: 핵심 서울 26곳 + 전국 주요 18개 권역 = 44호출)
+// KV 미연결 시 즉석 하이브리드 수집 (Free Tier 50 한도 내: 핵심 서울 26곳 + 전국 15권역 + Radar 3 = 44호출)
 async function collectOnDemandNoKv(env) {
   const kst = getKstStrings();
   const seoulKey = (env.SEOUL_API_KEY || "sample").trim();
@@ -345,17 +444,19 @@ async function collectOnDemandNoKv(env) {
     "가로수길", "압구정로데오거리", "연남동", "여의도한강공원", "잠실롯데타워·석촌호수", "선릉역",
   ]);
   const coreSeoul = SEOUL_121_POIS.filter((p) => coreSeoulNames.has(p[2]));
-  const coreIts = NATIONWIDE_42_ITS.filter((_, i) => i % 2 === 0).slice(0, 18);
-  const [sData, iData] = await Promise.all([
+  const coreIts = NATIONWIDE_42_ITS.filter((_, i) => i % 2 === 0).slice(0, 15);
+  const [sData, iData, radar] = await Promise.all([
     seoulKey ? runPool(coreSeoul, 10, (p) => fetchOneSeoulPoi(p, seoulKey, kst.full)) : [],
     itsKey ? runPool(coreIts, 10, (h) => fetchOneItsHub(h, itsKey, kst.full)) : [],
+    fetchCloudflareRadarKr(env, kst),
   ]);
   const sorted = sortRecords([...sData, ...iData]);
   return {
     mode: "latest",
-    note: "KV 미연결 즉석 모드 (핵심 44곳). 전체 121+44곳 5분 자동수집은 KV 바인딩을 연결하세요.",
+    note: "KV 미연결 즉석 모드 (핵심 41곳 + Radar KR). 전체 121+44곳 5분 자동수집은 KV 바인딩을 연결하세요.",
     updated_at: kst.full,
     summary: summarize(sorted),
+    radar: radar || null,
     count: sorted.length,
     dates: [],
     data: sorted,
@@ -389,10 +490,12 @@ export default {
         kv_bound: Boolean(kv),
         seoul_key_set: Boolean(env.SEOUL_API_KEY && env.SEOUL_API_KEY !== "sample"),
         its_key_set: Boolean(env.ITS_API_KEY),
+        cf_radar_set: Boolean(env.CF_RADAR_TOKEN),
         gas_bridge_set: Boolean(env.GAS_INGEST_URL),
         catalog: { seoul_pois: SEOUL_121_POIS.length, nationwide_its: NATIONWIDE_42_ITS.length },
         last_updated: latest?.updated_at || null,
         cached_count: latest?.count || 0,
+        radar_cached: Boolean(latest?.radar),
       });
     }
 
@@ -401,6 +504,14 @@ export default {
     }
 
     const kv = env.TRAFFIC_KV;
+
+    if (mode === "radar") {
+      const cached = kv ? await kv.get("radar_latest", "json") : null;
+      if (cached) return jsonResponse({ mode: "radar", radar: cached });
+      const fresh = await fetchCloudflareRadarKr(env, getKstStrings());
+      if (fresh && kv) await kv.put("radar_latest", JSON.stringify(fresh), { expirationTtl: 1800 });
+      return jsonResponse({ mode: "radar", radar: fresh });
+    }
 
     if (mode === "dates") {
       if (!kv) return jsonResponse({ mode: "dates", dates: [], note: "KV 바인딩이 필요합니다." });

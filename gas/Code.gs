@@ -226,6 +226,7 @@ function setupSheets() {
       ["항목", "값", "설명"],
       ["SEOUL_API_KEY", "sample", "서울 열린데이터광장 인증키 (무료 발급: data.seoul.go.kr · sample은 광화문·덕수궁 1곳만 조회)"],
       ["ITS_API_KEY", "test", "국가교통정보센터 ITS 인증키 (무료 발급: its.go.kr · test는 데모용)"],
+      ["CF_RADAR_TOKEN", "", "(선택) Cloudflare Radar API 토큰 (무료: Account > Radar > Read · 대한민국 모바일·NetFlow 지수)"],
       ["수집_서울인구", "Y", "서울시 실시간 유동인구 수집 여부 (Y/N)"],
       ["수집_전국ITS", "Y", "전국 주요 권역 ITS 도로 혼잡도 수집 여부 (Y/N)"],
       ["허용_토큰", "", "(선택) 비워두면 공개 URL, 입력 시 웹앱 요청에 ?token=값 필요"],
@@ -649,6 +650,7 @@ function doGet(e) {
 
   const mode = String(params.mode || "latest").toLowerCase();
   try {
+    if (mode === "radar") return jsonOut_({ mode: "radar", radar: getSavedOrFreshRadar_(cfg) });
     if (mode === "dates") return jsonOut_(buildDatesPayload_());
     if (mode === "history") {
       const dateStr = String(params.date || "").trim();
@@ -661,6 +663,100 @@ function doGet(e) {
   } catch (err) {
     return jsonOut_({ error: String(err && err.message ? err.message : err) });
   }
+}
+
+function analyzeRadarSeriesGas_(seriesObj) {
+  const rawVals = (seriesObj && Array.isArray(seriesObj.values)) ? seriesObj.values : [];
+  const vals = [];
+  for (let i = 0; i < rawVals.length; i++) {
+    const n = Number(rawVals[i]);
+    if (!isNaN(n)) vals.push(n);
+  }
+  if (vals.length === 0) return null;
+  const last = vals[vals.length - 1];
+  const prev = vals.length >= 2 ? vals[vals.length - 2] : last;
+  let sum = 0;
+  for (let i = 0; i < vals.length; i++) sum += vals[i];
+  const avg = sum / vals.length;
+  const step = Math.max(1, Math.floor(vals.length / 28));
+  const spark = [];
+  for (let i = 0; i < vals.length; i += step) spark.push(Math.round(vals[i] * 100));
+  if (spark[spark.length - 1] !== Math.round(last * 100)) spark.push(Math.round(last * 100));
+  return {
+    idx: Number((last * 100).toFixed(1)),
+    deltaPct: prev > 0.0001 ? Number((((last - prev) / prev) * 100).toFixed(1)) : 0,
+    vsAvgPct: avg > 0.0001 ? Number((((last - avg) / avg) * 100).toFixed(1)) : 0,
+    avgRatio: avg > 0.0001 ? last / avg : 1,
+    spark: spark,
+  };
+}
+
+function fetchCloudflareRadarKr_(token) {
+  if (!token) return null;
+  const base = "https://api.cloudflare.com/client/v4/radar";
+  const hdr = { Authorization: "Bearer " + token, Accept: "application/json" };
+  try {
+    const resps = UrlFetchApp.fetchAll([
+      { url: `${base}/http/timeseries?location=KR&dateRange=1d&aggInterval=15m&deviceType=MOBILE&name=mobile`, headers: hdr, muteHttpExceptions: true },
+      { url: `${base}/http/summary/DEVICE_TYPE?location=KR&dateRange=1d`, headers: hdr, muteHttpExceptions: true },
+      { url: `${base}/netflows/timeseries?location=KR&dateRange=1d&aggInterval=15m&name=kr`, headers: hdr, muteHttpExceptions: true },
+    ]);
+    let mobStats = null, netStats = null, mobShare = 0, deskShare = 0;
+    if (resps[0].getResponseCode() === 200) {
+      const j = JSON.parse(resps[0].getContentText("UTF-8"));
+      mobStats = analyzeRadarSeriesGas_(j.result && (j.result.mobile || j.result.serie_0));
+    }
+    if (resps[1].getResponseCode() === 200) {
+      const j = JSON.parse(resps[1].getContentText("UTF-8"));
+      const s = (j.result && j.result.summary_0) || {};
+      const m = Number(s.mobile != null ? s.mobile : (s.MOBILE || 0));
+      const d = Number(s.desktop != null ? s.desktop : (s.DESKTOP || 0));
+      if (m + d > 0) {
+        mobShare = Number(((m / (m + d)) * 100).toFixed(1));
+        deskShare = Number((100 - mobShare).toFixed(1));
+      }
+    }
+    if (resps[2].getResponseCode() === 200) {
+      const j = JSON.parse(resps[2].getContentText("UTF-8"));
+      netStats = analyzeRadarSeriesGas_(j.result && (j.result.kr || j.result.serie_0));
+    }
+    if (!mobStats && !netStats && mobShare === 0) return null;
+    const ratio = mobStats ? mobStats.avgRatio : (netStats ? netStats.avgRatio : 1);
+    const radar = {
+      provider: "Cloudflare Radar",
+      location: "KR",
+      updated_at: Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH:mm"),
+      mobile_index: mobStats ? mobStats.idx : 0,
+      mobile_delta_pct: mobStats ? mobStats.deltaPct : 0,
+      mobile_vs_avg_pct: mobStats ? mobStats.vsAvgPct : 0,
+      netflow_index: netStats ? netStats.idx : 0,
+      netflow_delta_pct: netStats ? netStats.deltaPct : 0,
+      mobile_share_pct: mobShare,
+      desktop_share_pct: deskShare,
+      scale_factor: Number(Math.max(0.78, Math.min(1.32, 0.8 + ratio * 0.2)).toFixed(3)),
+      sparkline: (mobStats && mobStats.spark) || (netStats && netStats.spark) || [],
+    };
+    PropertiesService.getScriptProperties().setProperty("RADAR_KR_JSON", JSON.stringify(radar));
+    return radar;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getSavedOrFreshRadar_(cfg) {
+  const cache = CacheService.getScriptCache();
+  const cHit = cache.get("radar_kr");
+  if (cHit) return JSON.parse(cHit);
+  const tok = String((cfg && cfg["CF_RADAR_TOKEN"]) || "").trim();
+  if (tok) {
+    const fresh = fetchCloudflareRadarKr_(tok);
+    if (fresh) {
+      try { cache.put("radar_kr", JSON.stringify(fresh), 300); } catch (_) {}
+      return fresh;
+    }
+  }
+  const saved = PropertiesService.getScriptProperties().getProperty("RADAR_KR_JSON");
+  return saved ? JSON.parse(saved) : null;
 }
 
 function buildLatestPayload_() {
@@ -697,9 +793,11 @@ function buildLatestPayload_() {
     }
   }
   const datesObj = buildDatesPayload_();
+  const radarObj = getSavedOrFreshRadar_(readConfig_());
   const payload = {
     mode: "latest",
     updated_at: updatedAt,
+    radar: radarObj,
     count: data.length,
     dates: datesObj.dates.map((d) => d.date),
     data: data,

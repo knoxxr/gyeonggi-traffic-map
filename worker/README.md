@@ -35,6 +35,10 @@ npx wrangler secret put SEOUL_API_KEY
 # 국가교통정보센터 ITS 인증키 (https://www.its.go.kr/opendata/opendataList)
 npx wrangler secret put ITS_API_KEY
 
+# (선택) Cloudflare Radar 대한민국 실시간 모바일·NetFlow 트래픽 지수 (무료)
+# Cloudflare 대시보드 > My Profile > API Tokens > Create Custom Token (Account > Radar > Read)
+npx wrangler secret put CF_RADAR_TOKEN
+
 # (선택) Google Drive 스프레드시트에도 동시에 영구 적재하고 싶다면:
 npx wrangler secret put GAS_INGEST_URL
 ```

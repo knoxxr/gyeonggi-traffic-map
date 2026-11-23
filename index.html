@@ -286,6 +286,45 @@
             </div>
           </div>
 
+          <div id="radarKrBox" class="hidden p-3.5 border-b border-[var(--card-border)] bg-[var(--background)]/55">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="w-2 h-2 rounded-full bg-[#f97316] shrink-0"></span>
+                <h2 class="text-xs font-bold text-[var(--foreground)] truncate">Cloudflare Radar · KR 모바일</h2>
+              </div>
+              <span id="radarTimeTag" class="text-[11px] font-mono text-[var(--muted-foreground)] shrink-0"></span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 mb-2">
+              <div class="p-1.5 rounded-md bg-[var(--card)] border border-[var(--card-border)] min-w-0">
+                <div class="text-[10px] text-[var(--muted-foreground)]">모바일 지수</div>
+                <div id="radarMobVal" class="text-xs font-bold tabular-nums mt-0.5">—</div>
+              </div>
+              <div class="p-1.5 rounded-md bg-[var(--card)] border border-[var(--card-border)] min-w-0">
+                <div class="text-[10px] text-[var(--muted-foreground)]">NetFlow</div>
+                <div id="radarNetVal" class="text-xs font-bold tabular-nums mt-0.5">—</div>
+              </div>
+              <div class="p-1.5 rounded-md bg-[var(--card)] border border-[var(--card-border)] min-w-0">
+                <div class="text-[10px] text-[var(--muted-foreground)]">모바일 비중</div>
+                <div id="radarShareVal" class="text-xs font-bold tabular-nums mt-0.5">—</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 mb-1.5">
+              <div class="flex-1 h-1.5 rounded-full bg-[var(--secondary)] overflow-hidden flex">
+                <div id="radarMobBar" class="h-full bg-[#f97316]" style="width:64%"></div>
+                <div id="radarDeskBar" class="h-full bg-[#3b82f6]" style="width:36%"></div>
+              </div>
+              <span id="radarShareSub" class="text-[10px] font-mono text-[var(--muted-foreground)] shrink-0">모바일/PC</span>
+            </div>
+            <div id="radarSparkWrap" class="w-full h-9 rounded bg-[var(--card)] border border-[var(--card-border)] px-1 py-0.5 mb-1.5"></div>
+            <label class="flex items-center justify-between text-[11px] text-[var(--muted-foreground)] cursor-pointer select-none">
+              <span class="flex items-center gap-1.5">
+                <input id="radarScaleToggle" type="checkbox" checked class="accent-[var(--primary)] cursor-pointer" />
+                <span>전국 지도 트래픽 보정 반영</span>
+              </span>
+              <span id="radarScaleVal" class="font-mono font-semibold text-[var(--foreground)]">×1.00</span>
+            </label>
+          </div>
+
           <div id="liveCrowdBox" class="hidden p-3.5 border-b border-[var(--card-border)] bg-[var(--background)]/40">
             <div class="flex items-center justify-between gap-2 mb-1.5">
               <div class="flex items-center gap-1.5 min-w-0">
@@ -1176,6 +1215,10 @@
     let liveSpots = [];
     let crowdFilter = "all";
     let showCrowdPins = true;
+    const radarState = { data: null, applyScale: true };
+    function getRadarMul() {
+      return (radarState.data && radarState.applyScale && radarState.data.scale_factor) ? radarState.data.scale_factor : 1.0;
+    }
 
     const HOUR_PHASES_WD = [
       "심야 저점", "심야 안정", "새벽 최저점", "새벽 최저점", "이른 새벽", "출근 준비",
@@ -1229,8 +1272,10 @@
     }
     function getCellMetrics(cIdx, hourFloat, dayKey) {
       const m = getMetricsFromArray(dayKey === "wd" ? cellWd : cellWe, cIdx * 24, dayKey === "wd" ? cellAvgWd[cIdx] : cellAvgWe[cIdx], hourFloat);
-      if (liveState.enabled || historyState.active) {
-        const cur = m.cur * liveBurstMul[cIdx], prev = m.prev * liveBurstPrev[cIdx];
+      const rMul = getRadarMul();
+      if (liveState.enabled || historyState.active || rMul !== 1.0) {
+        const cur = m.cur * ((liveState.enabled || historyState.active) ? liveBurstMul[cIdx] : 1) * rMul;
+        const prev = m.prev * ((liveState.enabled || historyState.active) ? liveBurstPrev[cIdx] : 1);
         const deltaAbs = cur - prev;
         return { cur, prev, avg: m.avg, deltaAbs, deltaPct: prev > 0.0005 ? (deltaAbs / prev) * 100 : 0, vsAvg: m.avg > 0.0005 ? ((cur - m.avg) / m.avg) * 100 : 0 };
       }
@@ -1614,6 +1659,7 @@
       const avgArr = state.day === "wd" ? cellAvgWd : cellAvgWe;
       const metricMode = state.metric;
       const useLive = liveState.enabled || historyState.active;
+      const rMul = getRadarMul();
       const fSido = state.filterSido;
       const pulseCut = state.timeStepMin === 15 ? 3.5 : 14.0;
       const rawPulse = [];
@@ -1630,6 +1676,7 @@
         if (cur < 0.005) cur = 0.005;
         if (prev < 0.005) prev = 0.005;
         if (useLive) { cur *= liveBurstMul[i]; prev *= liveBurstPrev[i]; }
+        if (rMul !== 1.0) cur *= rMul;
         const dAbs = cur - prev;
         const dPct = (dAbs / prev) * 100;
         const val = metricMode === "deltaPct" ? dPct
@@ -3102,6 +3149,8 @@
     function disableLiveMode() {
       stopApiPolling(false);
       liveState.enabled = false; liveState.source = "kst";
+      radarState.data = null;
+      renderRadarCard();
       if (!historyState.active) {
         liveSpots = [];
         liveBurstMul.fill(1.0); liveBurstPrev.fill(1.0);
@@ -3317,9 +3366,63 @@
       return spots;
     }
 
+    function renderRadarCard() {
+      const box = document.getElementById("radarKrBox");
+      const r = radarState.data;
+      if (!r) { box.classList.add("hidden"); return; }
+      box.classList.remove("hidden");
+      document.getElementById("radarTimeTag").textContent = r.updated_at ? String(r.updated_at).slice(-5) + " KST" : "KR";
+      const fmtD = (v) => {
+        const n = Number(v) || 0;
+        const cls = n >= 0 ? "text-[#dc2626]" : "text-[#2563eb]";
+        return `<span class="text-[10px] font-semibold ${cls} ml-0.5">${n >= 0 ? "+" : ""}${n.toFixed(1)}%</span>`;
+      };
+      document.getElementById("radarMobVal").innerHTML = `${Number(r.mobile_index || 0).toFixed(1)}${fmtD(r.mobile_delta_pct)}`;
+      document.getElementById("radarNetVal").innerHTML = `${Number(r.netflow_index || 0).toFixed(1)}${fmtD(r.netflow_delta_pct)}`;
+      const mShare = Number(r.mobile_share_pct || 0);
+      const dShare = Number(r.desktop_share_pct || (mShare > 0 ? 100 - mShare : 0));
+      document.getElementById("radarShareVal").textContent = mShare > 0 ? `${mShare.toFixed(1)}%` : "—";
+      document.getElementById("radarMobBar").style.width = `${Math.max(5, Math.min(95, mShare || 60))}%`;
+      document.getElementById("radarDeskBar").style.width = `${Math.max(5, Math.min(95, dShare || 40))}%`;
+      document.getElementById("radarShareSub").textContent = mShare > 0 ? `모바일 ${Math.round(mShare)} / PC ${Math.round(dShare)}` : "모바일/PC";
+      document.getElementById("radarScaleVal").textContent = `×${getRadarMul().toFixed(2)}`;
+
+      const sp = Array.isArray(r.sparkline) ? r.sparkline : [];
+      const wrap = document.getElementById("radarSparkWrap");
+      if (sp.length >= 2) {
+        const maxV = Math.max(10, ...sp), minV = Math.min(...sp), span = Math.max(1, maxV - minV);
+        const pts = sp.map((v, i) => {
+          const x = (i / (sp.length - 1)) * 220;
+          const y = 26 - ((v - minV) / span) * 22;
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(" ");
+        const area = `0,28 ${pts} 220,28`;
+        wrap.innerHTML = `<svg viewBox="0 0 220 28" class="w-full h-full overflow-visible" preserveAspectRatio="none">
+          <polygon points="${area}" fill="rgba(249,115,22,0.16)" />
+          <polyline points="${pts}" fill="none" stroke="#f97316" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" />
+        </svg>`;
+      } else {
+        wrap.innerHTML = `<div class="h-full flex items-center justify-center text-[10px] text-[var(--muted-foreground)]">24시간 추이 대기 중</div>`;
+      }
+    }
+
+    document.getElementById("radarScaleToggle").addEventListener("change", (e) => {
+      radarState.applyScale = e.target.checked;
+      renderRadarCard();
+      markTimeDirty(); updateSidebar();
+    });
+
     function applyLiveApiPayload(parsed) {
       if (parsed && parsed.error) throw new Error(parsed.error);
+      if (parsed && parsed.radar) {
+        radarState.data = parsed.radar;
+        renderRadarCard();
+      }
       const arr = Array.isArray(parsed) ? parsed : (parsed.data || parsed.rows || parsed.items || parsed.cells || []);
+      if ((!Array.isArray(arr) || arr.length === 0) && parsed && parsed.radar) {
+        markTimeDirty(); updateSidebar();
+        return { matched: 1, mode: "Cloudflare Radar KR" };
+      }
       if (!Array.isArray(arr) || arr.length === 0) throw new Error("JSON 배열 데이터가 비어 있습니다.");
       if (arr.some((r) => r.hour !== undefined && r.hour !== null && r.hour !== "")) {
         applyUploadedRecords(arr, "실시간 API"); return { matched: arr.length, mode: "24h" };
@@ -3607,11 +3710,34 @@
       const payload = buildHybridDemoPayload();
       const hmKey = `${String(kst.hh).padStart(2, "0")}:00`;
       const curArr = payload.snapshots[hmKey] || payload.snapshots["18:00"];
+      const spark = [];
+      for (let i = 0; i < 24; i++) {
+        const hh = (kst.hh - 23 + i + 24) % 24;
+        const w1 = Math.exp(-0.5 * Math.pow((hh - 13) / 4.2, 2));
+        const w2 = Math.exp(-0.5 * Math.pow((hh - 21) / 3.2, 2));
+        spark.push(Math.round(18 + Math.max(w1 * 0.78, w2 * 0.92) * 76));
+      }
+      const curMob = spark[spark.length - 1], prevMob = spark[spark.length - 2] || curMob;
+      const avgMob = spark.reduce((a, b) => a + b, 0) / spark.length;
+      const demoRadar = {
+        provider: "Cloudflare Radar (샘플)",
+        location: "KR",
+        updated_at: `${payload.date} ${kst.hhmmss.slice(0, 5)}`,
+        mobile_index: curMob,
+        mobile_delta_pct: Number((((curMob - prevMob) / Math.max(1, prevMob)) * 100).toFixed(1)),
+        mobile_vs_avg_pct: Number((((curMob - avgMob) / Math.max(1, avgMob)) * 100).toFixed(1)),
+        netflow_index: Math.min(100, Math.round(curMob * 1.04)),
+        netflow_delta_pct: Number((((curMob - prevMob) / Math.max(1, prevMob)) * 90).toFixed(1)),
+        mobile_share_pct: kst.isWeekend ? 69.4 : 63.8,
+        desktop_share_pct: kst.isWeekend ? 30.6 : 36.2,
+        scale_factor: Number(Math.max(0.82, Math.min(1.25, 0.8 + (curMob / Math.max(1, avgMob)) * 0.2)).toFixed(3)),
+        sparkline: spark,
+      };
       if (state.playing) togglePlay();
       exitHistoryMode(false);
       stopApiPolling(false);
       liveState.enabled = true; liveState.source = "api"; liveState.lastSyncStr = kst.hhmmss.slice(0, 5); liveState.kstClockStr = kst.hhmmss;
-      applyLiveApiPayload({ data: curArr });
+      applyLiveApiPayload({ data: curArr, radar: demoRadar });
       updateLiveButtonUI(); syncKstClock(true);
       uploadModal.classList.add("hidden");
     });
@@ -3679,6 +3805,7 @@
 
     document.getElementById("resetDataBtn").addEventListener("click", () => {
       exitHistoryMode(false);
+      radarState.data = null; renderRadarCard();
       disableLiveMode();
       for (const d of DONGS) { d.wd.set(d.origWd); d.we.set(d.origWe); }
       recomputeAggregates(); refreshAllCellScales();

@@ -18,7 +18,7 @@
   - **32×32 공간 격자 인덱스**: 전국 3,559개 행정동·256개 시군구 호버/클릭 히트 테스트를 O(1)에 처리
 - **실시간 유동인구·ITS 수집 & Google Drive 히스토리 재생 (`gas/Code.gs`)**:
   - `LIVE` 모드: 한국 표준시(KST) 1초 동기화 + 3초 주기 실시간 트래픽 미세 변동 시뮬레이션
-  - **Cloudflare Worker 하이브리드 프록시 (`worker/`)**: 서울 공식 121곳 실시간 유동인구(SKT·KT 기반) + 전국 16개 시·도 44권역 ITS 도로 혼잡도를 자동 수집·캐싱(Free Tier 샤드 순환 / Paid 5분 일괄) + KV 90일 히스토리 + Google Sheets 자동 전달([`worker/README.md`](worker/README.md))
+  - **Cloudflare Worker 하이브리드 프록시 (`worker/`)**: 서울 공식 121곳 실시간 유동인구(SKT·KT 기반) + 전국 16개 시·도 44권역 ITS 도로 혼잡도 + **Cloudflare Radar 대한민국(KR) 실시간 모바일·NetFlow 지수**를 자동 수집·캐싱(Free Tier 샤드 순환 / Paid 5분 일괄) + KV 90일 히스토리 + Google Sheets 자동 전달([`worker/README.md`](worker/README.md))
   - **Google Sheets 자동 수집기 (`gas/Code.gs`)**: 별도 서버 없이 본인 Google 스프레드시트에서 121+44곳을 자동 누적(`최신현황` + 월별 `히스토리_YYYYMM` 시트)하거나 Worker Webhook(`doPost`) 수신([`gas/README.md`](gas/README.md))
   - **Drive / KV 히스토리 재생**: 상단 `실시간 API · 데이터 → Drive 히스토리` 탭에서 저장된 날짜를 선택해 과거 하루치 인파·혼잡도 변화를 24시간 타임라인으로 그대로 재생
 - **4가지 변화량/규모 지표 & 2단계 시간 해상도**:
