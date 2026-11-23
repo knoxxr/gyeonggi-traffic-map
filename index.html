@@ -287,13 +287,17 @@
           </div>
 
           <div id="liveCrowdBox" class="hidden p-3.5 border-b border-[var(--card-border)] bg-[var(--background)]/40">
-            <div class="flex items-center justify-between gap-2 mb-2">
+            <div class="flex items-center justify-between gap-2 mb-1.5">
               <div class="flex items-center gap-1.5 min-w-0">
                 <span id="liveCrowdDot" class="w-2 h-2 rounded-full bg-[#dc2626] shrink-0"></span>
                 <h2 id="liveCrowdTitle" class="text-xs font-bold text-[var(--foreground)] truncate">실시간 유동인구·혼잡 TOP</h2>
               </div>
-              <button id="exitCrowdModeBtn" class="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-pointer shrink-0">종료</button>
+              <div class="flex items-center gap-1 shrink-0">
+                <button id="toggleCrowdPinsBtn" class="text-[11px] px-2 py-0.5 rounded border border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] font-medium cursor-pointer">지도 핀</button>
+                <button id="exitCrowdModeBtn" class="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-pointer">종료</button>
+              </div>
             </div>
+            <div id="liveCrowdSummary" class="flex flex-wrap items-center gap-1.5 mb-2 text-[11px]"></div>
             <div class="flex items-center justify-between gap-1.5 mb-2">
               <div class="flex items-center p-0.5 rounded-md bg-[var(--background)] border border-[var(--border)] text-[11px]">
                 <button class="seg-btn active px-2 py-0.5 rounded cursor-pointer" data-crowd-filter="all">전체</button>
@@ -470,17 +474,17 @@
 
       <div id="tabApiPanel" class="py-3 space-y-3">
         <p class="text-[var(--muted-foreground)] leading-relaxed">
-          Google Apps Script 웹 앱 URL(<code>gas/Code.gs</code>)이나 공공·통신 API 프록시의 <strong>JSON 엔드포인트</strong>를 연결하면 지정한 주기마다 전국 유동인구·혼잡도와 25,435개 셀 지도를 실시간 갱신합니다.
+          <strong>Cloudflare Worker 프록시</strong>(<code>worker/</code> · 서울 121곳 + 전국 ITS 44권역) 또는 <strong>Google Apps Script 웹 앱</strong>(<code>gas/Code.gs</code>) URL을 연결하면 실시간 유동인구·혼잡도가 전국 지도에 자동 반영됩니다.
         </p>
 
         <div class="space-y-2">
           <div>
-            <label for="apiUrlInput" class="block font-medium mb-1">실시간 JSON API / Google Apps Script 웹 앱 URL</label>
-            <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-2.5 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
+            <label for="apiUrlInput" class="block font-medium mb-1">실시간 API URL (Cloudflare Worker / Google Apps Script)</label>
+            <input id="apiUrlInput" type="url" placeholder="https://korea-traffic-hybrid-proxy.yourname.workers.dev" class="w-full px-2.5 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <label for="apiAuthInput" class="block font-medium mb-1">인증 헤더 또는 GAS 토큰 (선택)</label>
+              <label for="apiAuthInput" class="block font-medium mb-1">토큰 또는 인증 헤더 (선택)</label>
               <input id="apiAuthInput" type="text" placeholder="비워두거나 token 값 / Bearer ..." class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
             </div>
             <div>
@@ -499,7 +503,8 @@
           <button id="apiStartBtn" class="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold cursor-pointer">실시간 API 폴링 시작</button>
           <button id="apiStopBtn" class="hidden px-3 py-1.5 rounded-lg bg-[#dc2626] text-white font-semibold cursor-pointer">폴링 중지</button>
           <button id="apiTestBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">1회 테스트</button>
-          <button id="apiDemoKstBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">KST 실시간 모드 켜기</button>
+          <button id="apiDemoHybridBtn" class="px-3 py-1.5 rounded-lg border border-[var(--primary)]/50 bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/15 font-semibold cursor-pointer">서울·ITS 하이브리드 체험</button>
+          <button id="apiDemoKstBtn" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium cursor-pointer">KST 실시간 모드</button>
         </div>
 
         <div id="apiStatusBox" class="hidden p-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] leading-relaxed"></div>
@@ -1170,6 +1175,7 @@
     };
     let liveSpots = [];
     let crowdFilter = "all";
+    let showCrowdPins = true;
 
     const HOUR_PHASES_WD = [
       "심야 저점", "심야 안정", "새벽 최저점", "새벽 최저점", "이른 새벽", "출근 준비",
@@ -1967,7 +1973,7 @@
       }
 
       // Real-time / Drive History Crowd & ITS Hotspot Pins
-      if (liveSpots.length > 0) {
+      if (showCrowdPins && liveSpots.length > 0) {
         const spotFont = "600 10.5px -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif";
         vctx.font = spotFont;
         vctx.textAlign = "left";
@@ -3185,6 +3191,7 @@
       const titleEl = document.getElementById("liveCrowdTitle");
       const dotEl = document.getElementById("liveCrowdDot");
       const metaEl = document.getElementById("liveCrowdMeta");
+      const sumEl = document.getElementById("liveCrowdSummary");
       if (historyState.active) {
         dotEl.style.background = "#2563eb";
         titleEl.textContent = `히스토리 혼잡 TOP (${historyState.date})`;
@@ -3194,18 +3201,29 @@
         titleEl.textContent = "실시간 유동인구·혼잡 TOP";
         metaEl.textContent = `${liveState.lastSyncStr || "실측"} · ${liveSpots.length}곳`;
       }
-      const list = liveSpots.filter((s) => crowdFilter === "all" || s.source === crowdFilter).slice(0, 20);
+      let redCnt = 0, orgCnt = 0, seoulCnt = 0, itsCnt = 0;
+      for (let i = 0; i < liveSpots.length; i++) {
+        const s = liveSpots[i];
+        if (s.source === "seoul_pop") seoulCnt++; else if (s.source === "its") itsCnt++;
+        if (s.congest === "붐빔" || s.congest === "정체") redCnt++;
+        else if (s.congest === "약간 붐빔" || s.congest === "서행") orgCnt++;
+      }
+      sumEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-[#dc2626]/12 text-[#dc2626] font-semibold">붐빔·정체 ${redCnt}</span>`
+        + `<span class="px-1.5 py-0.5 rounded bg-[#ea580c]/12 text-[#ea580c] font-semibold">혼잡·서행 ${orgCnt}</span>`
+        + `<span class="text-[var(--muted-foreground)]">서울 ${seoulCnt} · ITS ${itsCnt}</span>`;
+
+      const list = liveSpots.filter((s) => crowdFilter === "all" || s.source === crowdFilter).slice(0, 30);
       document.getElementById("liveCrowdList").innerHTML = list.length === 0
         ? `<div class="text-[11px] text-[var(--muted-foreground)] py-2 text-center">해당 분류의 실측 데이터가 없습니다.</div>`
         : list.map((sp, idx) => {
           const valTxt = sp.pop > 0 ? `${(sp.pop / 10000).toFixed(1)}만명` : sp.speed > 0 ? `${sp.speed.toFixed(0)} km/h` : `${sp.traffic_gbps.toFixed(1)}G`;
-          const srcTag = sp.source === "seoul_pop" ? "서울 인파" : sp.source === "its" ? "전국 ITS" : "실측";
+          const srcTag = sp.category || (sp.source === "seoul_pop" ? "서울 인파" : sp.source === "its" ? "전국 ITS" : "실측");
           return `<button type="button" data-spot-wx="${sp.wx}" data-spot-wy="${sp.wy}" data-spot-src="${sp.source}" class="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] border border-[var(--card-border)] text-left cursor-pointer transition-colors">
             <div class="flex items-center gap-1.5 min-w-0">
               <span class="text-[11px] font-mono text-[var(--muted-foreground)] w-4 shrink-0">${idx + 1}</span>
               <div class="min-w-0">
                 <div class="text-xs font-semibold text-[var(--foreground)] truncate">${sp.name}</div>
-                <div class="text-[10px] text-[var(--muted-foreground)]">${srcTag} · ${valTxt}</div>
+                <div class="text-[10px] text-[var(--muted-foreground)] truncate">${srcTag} · ${valTxt}</div>
               </div>
             </div>
             ${congestBadgeHtml(sp.congest)}
@@ -3219,6 +3237,13 @@
       renderCrowdPanel();
       state.dirtyVec = true;
     }));
+    document.getElementById("toggleCrowdPinsBtn").addEventListener("click", (e) => {
+      showCrowdPins = !showCrowdPins;
+      const b = e.currentTarget;
+      b.style.opacity = showCrowdPins ? "1" : "0.5";
+      b.textContent = showCrowdPins ? "지도 핀" : "핀 숨김";
+      state.dirtyVec = true;
+    });
     document.getElementById("exitCrowdModeBtn").addEventListener("click", () => {
       if (historyState.active) exitHistoryMode(true);
       else disableLiveMode();
@@ -3276,6 +3301,7 @@
           lon, lat, wx, wy,
           name: String(r.name || r.code || "지점"),
           code: String(r.code || ""),
+          category: String(r.category || ""),
           source: src,
           pop,
           speed,
@@ -3328,24 +3354,25 @@
         for (let i = 0; i < HEX_COUNT; i++) { const ratio = dongScaleUpdate.get(cellDong[i]); if (ratio !== undefined) liveBurstMul[i] = ratio; }
         recomputeAggregates();
       }
-      // If GAS also included available dates, pre-populate History dropdown!
+      // If GAS / Worker also included available dates, pre-populate History dropdown!
       if (parsed && Array.isArray(parsed.dates) && parsed.dates.length > 0 && historyDateSelect.options.length <= 1) {
         historyDateSelect.innerHTML = parsed.dates.map((d) => `<option value="${d}">${d}</option>`).join("");
       }
       renderCrowdPanel();
       state.dirtyVec = true;
-      return { matched: matchedDongs + matchedCoords, mode: matchedCoords > 0 ? "실측 유동인구·ITS" : "행정동 스냅샷" };
+      return { matched: matchedDongs + matchedCoords, mode: matchedCoords > 0 ? "서울 인파·전국 ITS 하이브리드" : "행정동 스냅샷" };
     }
 
     async function fetchExternalApiOnce() {
       const rawUrl = apiUrlInput.value.trim();
       if (!rawUrl) { apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">API URL을 입력해 주세요.</span>`; return false; }
       const authRaw = apiAuthInput.value.trim();
-      const isGas = rawUrl.includes("script.google.com") || rawUrl.includes("script.googleusercontent.com");
+      const isBuiltInProxy = rawUrl.includes("script.google.com") || rawUrl.includes("script.googleusercontent.com") || rawUrl.includes("workers.dev");
       let reqUrl = rawUrl;
       const fetchOpts = { cache: "no-store" };
-      if (isGas) {
-        reqUrl = buildGasUrl(rawUrl, { mode: "latest", token: authRaw && !authRaw.includes(":") ? authRaw : historyTokenInput.value.trim() });
+      if (isBuiltInProxy) {
+        const tk = authRaw && !authRaw.includes(":") && !authRaw.toLowerCase().startsWith("bearer ") ? authRaw : historyTokenInput.value.trim();
+        reqUrl = buildGasUrl(rawUrl, { mode: "latest", token: tk });
       } else {
         const headers = { Accept: "application/json" };
         if (authRaw) { const c = authRaw.indexOf(":"); if (c > 0) headers[authRaw.slice(0, c).trim()] = authRaw.slice(c + 1).trim(); else headers["Authorization"] = authRaw; }
@@ -3503,50 +3530,89 @@
       historyStatusBox.innerHTML = `<span class="font-semibold">히스토리 모드를 종료하고 기본 전국 모델로 복귀했습니다.</span>`;
     });
 
-    // Built-in 1-day Demo History (Seoul real hotspots + Nationwide ITS) to test Drive History UX immediately
-    document.getElementById("historyDemoBtn").addEventListener("click", () => {
+    // Built-in Hybrid Demo (Seoul key hotspots + all 16 시·도 Nationwide ITS hubs)
+    function buildHybridDemoPayload() {
       const demoDate = new Date().toISOString().slice(0, 10);
       const demoSpots = [
-        ["seoul_pop", "POI014", "강남역", 127.0276, 37.4979, 68000, 13.5, 4.5],
-        ["seoul_pop", "POI007", "홍대 관광특구", 126.9237, 37.5559, 64000, 19.0, 4.0],
-        ["seoul_pop", "POI050", "잠실역", 127.1001, 37.5133, 62000, 16.0, 4.2],
-        ["seoul_pop", "POI003", "명동 관광특구", 126.9849, 37.5636, 52000, 15.0, 3.8],
-        ["seoul_pop", "POI068", "성수카페거리", 127.0558, 37.5445, 48000, 16.5, 3.5],
-        ["seoul_pop", "POI072", "여의도", 126.9245, 37.5219, 55000, 12.0, 3.6],
-        ["seoul_pop", "POI009", "광화문·덕수궁", 126.9768, 37.5698, 44000, 13.0, 4.0],
-        ["seoul_pop", "POI017", "고속터미널역", 127.0049, 37.5049, 51000, 17.5, 4.2],
-        ["seoul_pop", "POI033", "서울역", 126.9707, 37.5547, 46000, 17.0, 4.6],
-        ["seoul_pop", "POI015", "건대입구역", 127.0695, 37.5404, 42000, 19.5, 3.8],
-        ["its", "ITS_GG_PG", "경기 판교·분당", 127.1100, 37.3940, 0, 18.0, 3.5],
-        ["its", "ITS_GG_SW", "경기 수원·광교", 127.0320, 37.2740, 0, 18.0, 3.8],
-        ["its", "ITS_ICN_BP", "인천 부평·구월 도심", 126.7160, 37.4710, 0, 17.5, 4.0],
-        ["its", "ITS_BS_SM", "부산 서면·도심", 129.0596, 35.1578, 0, 17.5, 4.0],
-        ["its", "ITS_BS_HU", "부산 해운대·센텀", 129.1586, 35.1631, 0, 15.0, 4.5],
-        ["its", "ITS_DG_DS", "대구 동성로·수성", 128.6014, 35.8714, 0, 17.0, 4.0],
-        ["its", "ITS_DJ_DS", "대전 둔산·유성", 127.3845, 36.3504, 0, 17.5, 3.8],
-        ["its", "ITS_GJ_SM", "광주 상무·충장", 126.8526, 35.1595, 0, 17.5, 4.0],
-        ["its", "ITS_JJ_CT", "제주 제주시·공항", 126.5100, 33.4996, 0, 14.5, 4.5],
+        // 서울 주요 핫스팟 (관광특구·인구밀집·발달상권·공원)
+        ["seoul_pop", "인구밀집지역", "SP075", "강남역", 127.0276, 37.4979, 68000, 13.5, 4.5],
+        ["seoul_pop", "관광특구", "SP012", "홍대 관광특구", 126.9237, 37.5559, 66000, 19.0, 4.0],
+        ["seoul_pop", "인구밀집지역", "SP112", "잠실역", 127.1001, 37.5133, 62000, 16.0, 4.2],
+        ["seoul_pop", "관광특구", "SP008", "명동 관광특구", 126.9849, 37.5636, 54000, 15.0, 3.8],
+        ["seoul_pop", "발달상권", "SP056", "성수카페거리", 127.0558, 37.5445, 49000, 16.5, 3.5],
+        ["seoul_pop", "발달상권", "SP060", "여의도", 126.9245, 37.5219, 56000, 12.0, 3.6],
+        ["seoul_pop", "고궁·문화유산", "SP002", "광화문·덕수궁", 126.9768, 37.5698, 45000, 13.0, 4.0],
+        ["seoul_pop", "인구밀집지역", "SP078", "고속터미널역", 127.0049, 37.5049, 52000, 17.5, 4.2],
+        ["seoul_pop", "인구밀집지역", "SP092", "서울역", 126.9707, 37.5547, 48000, 17.0, 4.6],
+        ["seoul_pop", "인구밀집지역", "SP076", "건대입구역", 127.0695, 37.5404, 44000, 19.5, 3.8],
+        ["seoul_pop", "관광특구", "SP006", "강남 MICE 관광특구", 127.0592, 37.5117, 51000, 14.5, 4.0],
+        ["seoul_pop", "관광특구", "SP007", "동대문 관광특구", 127.0095, 37.5665, 42000, 16.5, 4.4],
+        ["seoul_pop", "관광특구", "SP009", "이태원 관광특구", 126.9945, 37.5345, 41000, 20.5, 3.5],
+        ["seoul_pop", "인구밀집지역", "SP074", "가산디지털단지역", 126.8825, 37.4815, 53000, 11.5, 3.4],
+        ["seoul_pop", "발달상권", "SP062", "영등포 타임스퀘어", 126.9032, 37.5171, 46000, 16.5, 4.0],
+        ["seoul_pop", "인구밀집지역", "SP088", "사당역", 126.9816, 37.4765, 43000, 18.5, 3.6],
+        ["seoul_pop", "발달상권", "SP059", "압구정로데오거리", 127.0391, 37.5273, 39000, 18.0, 3.8],
+        ["seoul_pop", "공원", "SP035", "여의도한강공원", 126.9344, 37.5284, 38000, 17.0, 3.4],
+        // 전국 16개 시·도 ITS 권역
+        ["its", "전국 ITS · 인천", "ITS_ICN_BP", "인천 부평·구월 도심", 126.7160, 37.4710, 0, 17.5, 4.0],
+        ["its", "전국 ITS · 인천", "ITS_ICN_SD", "인천 송도국제도시", 126.6470, 37.3860, 0, 18.0, 3.8],
+        ["its", "전국 ITS · 경기", "ITS_GG_PG", "경기 판교·분당", 127.1100, 37.3940, 0, 18.0, 3.5],
+        ["its", "전국 ITS · 경기", "ITS_GG_SW", "경기 수원·광교", 127.0320, 37.2740, 0, 18.0, 3.8],
+        ["its", "전국 ITS · 경기", "ITS_GG_DT", "경기 화성 동탄·기흥", 127.0950, 37.2050, 0, 17.5, 3.8],
+        ["its", "전국 ITS · 부산", "ITS_BS_SM", "부산 서면·도심", 129.0596, 35.1578, 0, 17.5, 4.0],
+        ["its", "전국 ITS · 부산", "ITS_BS_HU", "부산 해운대·센텀", 129.1586, 35.1631, 0, 15.0, 4.5],
+        ["its", "전국 ITS · 대구", "ITS_DG_DS", "대구 동성로·수성", 128.6014, 35.8714, 0, 17.0, 4.0],
+        ["its", "전국 ITS · 대전", "ITS_DJ_DS", "대전 둔산·유성", 127.3845, 36.3504, 0, 17.5, 3.8],
+        ["its", "전국 ITS · 광주", "ITS_GJ_SM", "광주 상무·충장", 126.8526, 35.1595, 0, 17.5, 4.0],
+        ["its", "전국 ITS · 울산", "ITS_US_SS", "울산 삼산·현대차권", 129.3390, 35.5384, 0, 17.5, 3.8],
+        ["its", "전국 ITS · 세종", "ITS_SJ_CT", "세종 정부청사·나성", 127.2650, 36.4950, 0, 18.0, 3.4],
+        ["its", "전국 ITS · 강원", "ITS_GW_GN", "강원 강릉·경포", 128.8960, 37.7640, 0, 14.5, 4.4],
+        ["its", "전국 ITS · 충북", "ITS_CB_CJ", "충북 청주·오송", 127.4600, 36.6424, 0, 17.5, 3.8],
+        ["its", "전국 ITS · 충남", "ITS_CN_CA", "충남 천안·아산", 127.1139, 36.8151, 0, 17.5, 4.0],
+        ["its", "전국 ITS · 전북", "ITS_JB_JJ", "전북 전주·혁신도시", 127.1480, 35.8242, 0, 17.0, 4.0],
+        ["its", "전국 ITS · 전남", "ITS_JN_YS", "전남 여수·순천", 127.6622, 34.7604, 0, 15.0, 4.2],
+        ["its", "전국 ITS · 경북", "ITS_GB_PH", "경북 포항·영일대", 129.3650, 36.0190, 0, 17.0, 4.0],
+        ["its", "전국 ITS · 경남", "ITS_GN_CW", "경남 창원·마산", 128.6811, 35.2280, 0, 17.5, 3.8],
+        ["its", "전국 ITS · 제주", "ITS_JJ_CT", "제주 제주시·공항", 126.5100, 33.4996, 0, 14.5, 4.5],
       ];
       const times = [], snapshots = {};
       for (let h = 0; h < 24; h++) {
         const hm = `${String(h).padStart(2, "0")}:00`;
         times.push(hm);
-        snapshots[hm] = demoSpots.map(([src, code, name, lon, lat, peakPop, peakH, spread]) => {
+        snapshots[hm] = demoSpots.map(([src, cat, code, name, lon, lat, peakPop, peakH, spread]) => {
           const wave = Math.exp(-0.5 * Math.pow((h - peakH) / spread, 2));
-          const morning = Math.exp(-0.5 * Math.pow((h - 8.5) / 1.8, 2)) * 0.65;
+          const morning = Math.exp(-0.5 * Math.pow((h - 8.5) / 1.8, 2)) * 0.68;
           const intensity = Math.min(1, 0.14 + Math.max(wave, morning) * 0.86);
           if (src === "seoul_pop") {
             const pop = Math.round(peakPop * intensity);
             const congest = pop >= 50000 ? "붐빔" : pop >= 35000 ? "약간 붐빔" : pop >= 18000 ? "보통" : "여유";
-            return { source: src, code, name, lon, lat, pop, congest, speed: 0, traffic_gbps: Number((pop / 1350).toFixed(2)) };
+            return { source: src, category: cat, code, name, lon, lat, pop, congest, speed: 0, traffic_gbps: Number((pop / 1350).toFixed(2)) };
           }
           const speed = Number((64 - intensity * 42).toFixed(1));
           const congest = speed < 26 ? "정체" : speed < 42 ? "서행" : "원활";
-          return { source: src, code, name, lon, lat, pop: 0, congest, speed, traffic_gbps: Number((8 + intensity * 18).toFixed(2)) };
+          return { source: src, category: cat, code, name, lon, lat, pop: 0, congest, speed, traffic_gbps: Number((8 + intensity * 18).toFixed(2)) };
         });
       }
-      activateHistoryDataset({ mode: "history", date: demoDate, times, snapshots }, "샘플 히스토리");
+      return { mode: "history", date: demoDate, times, snapshots };
+    }
+
+    document.getElementById("historyDemoBtn").addEventListener("click", () => {
+      activateHistoryDataset(buildHybridDemoPayload(), "샘플 히스토리");
       setHour(18.0);
+      uploadModal.classList.add("hidden");
+    });
+
+    document.getElementById("apiDemoHybridBtn").addEventListener("click", () => {
+      const kst = getKstNow();
+      const payload = buildHybridDemoPayload();
+      const hmKey = `${String(kst.hh).padStart(2, "0")}:00`;
+      const curArr = payload.snapshots[hmKey] || payload.snapshots["18:00"];
+      if (state.playing) togglePlay();
+      exitHistoryMode(false);
+      stopApiPolling(false);
+      liveState.enabled = true; liveState.source = "api"; liveState.lastSyncStr = kst.hhmmss.slice(0, 5); liveState.kstClockStr = kst.hhmmss;
+      applyLiveApiPayload({ data: curArr });
+      updateLiveButtonUI(); syncKstClock(true);
       uploadModal.classList.add("hidden");
     });
 

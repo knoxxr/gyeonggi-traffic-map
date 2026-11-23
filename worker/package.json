@@ -1,0 +1,15 @@
+{
+  "name": "korea-traffic-hybrid-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "서울 121곳 실시간 유동인구 + 전국 16개 시·도 44권역 ITS 하이브리드 Cloudflare Worker 프록시",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}

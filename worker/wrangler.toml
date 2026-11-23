@@ -1,0 +1,21 @@
+name = "korea-traffic-hybrid-proxy"
+main = "src/index.js"
+compatibility_date = "2026-04-01"
+
+# [수집 주기 설정]
+# - Free 플랜(무료, 50 subrequest 한도): "*/2 * * * *" + COLLECT_MODE = "free_chunked"
+#   (2분마다 4개 샤드 순환 -> 8분마다 서울 121곳 + 전국 ITS 44곳 전체 갱신, $0/월)
+# - Paid 플랜($5/월, 1000 subrequest): "*/5 * * * *" + COLLECT_MODE = "full"
+#   (5분마다 165곳 전체 일괄 수집)
+[triggers]
+crons = ["*/2 * * * *"]
+
+[vars]
+COLLECT_MODE = "free_chunked"
+
+# [KV 네임스페이스 설정 — 전체 121+44곳 캐싱 & 90일 히스토리 조회용]
+# 1) npx wrangler kv namespace create TRAFFIC_KV 실행
+# 2) 출력된 id를 아래 주석 해제 후 입력하세요
+# [[kv_namespaces]]
+# binding = "TRAFFIC_KV"
+# id = "여기에_KV_ID_입력"
