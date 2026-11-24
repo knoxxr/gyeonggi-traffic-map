@@ -20,6 +20,8 @@
   - `LIVE` 모드: 한국 표준시(KST) 1초 동기화 + 3초 주기 실시간 트래픽 미세 변동 시뮬레이션
   - **Cloudflare Worker 하이브리드 프록시 (`worker/`)**: 서울 공식 121곳 실시간 유동인구(SKT·KT 기반) + 전국 16개 시·도 44권역 ITS 도로 혼잡도 + **Cloudflare Radar 대한민국(KR) 실시간 모바일·NetFlow 지수**를 자동 수집·캐싱(Free Tier 샤드 순환 / Paid 5분 일괄) + KV 90일 히스토리 + Google Sheets 자동 전달([`worker/README.md`](worker/README.md))
   - **Google Sheets 자동 수집기 (`gas/Code.gs`)**: 별도 서버 없이 본인 Google 스프레드시트에서 121+44곳을 자동 누적(`최신현황` + 월별 `히스토리_YYYYMM` 시트)하거나 Worker Webhook(`doPost`) 수신([`gas/README.md`](gas/README.md))
+  - **실측 핀 상세 분석 & 향후 12시간 AI 인구 예측**: 지도 핀 또는 사이드바 혼잡 TOP 항목 클릭 시 추정 인구·혼잡 안내 메시지·**향후 12시간 시간별 AI 인구 예측 차트**·**성별/상주·비상주 비율**·**8개 연령대 분포**를 즉시 확인
+  - **무설정 자동 연결 (`config.json` · `?api=` 공유 링크)**: 루트 `config.json`에 기본 Worker/GAS URL을 지정하거나 `?api=https://...` 공유 링크로 접속하면 별도 입력 없이 실시간 모드 자동 연결 (동시접속 L1/L2/L3 캐시·ETag 304·멀티탭 공유·지터 보호 내장)
   - **Drive / KV 히스토리 재생**: 상단 `실시간 API · 데이터 → Drive 히스토리` 탭에서 저장된 날짜를 선택해 과거 하루치 인파·혼잡도 변화를 24시간 타임라인으로 그대로 재생
 - **4가지 변화량/규모 지표 & 2단계 시간 해상도**:
   - `변화율 (Δ%)` / `Δ트래픽 (Mbps·Gbps)` / `일평균 대비 (%)` / `총 트래픽`
@@ -31,7 +33,8 @@
 
 ```text
 gyeonggi-traffic-map/
-├── index.html                        # 완전 자립형 전국 실행 파일 (~670 KB, 브라우저에서 바로 실행)
+├── index.html                        # 완전 자립형 전국 실행 파일 (~680 KB, 브라우저에서 바로 실행)
+├── config.json                       # 무설정 기본 실시간 API URL / 자동 연결 설정
 ├── src/
 │   └── app.html                      # WebGL2 + 3-레이어 인터랙티브 지도 및 UI 소스 템플릿
 ├── worker/

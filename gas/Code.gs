@@ -392,12 +392,23 @@ function collectAll() {
     // 4) [최신현황] 시트 갱신
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const latestSheet = ss.getSheetByName(SHEET_LATEST) || ss.insertSheet(SHEET_LATEST);
-    const lHeader = [["수집시각", "구분", "코드", "장소명", "경도", "위도", "유동인구_최소", "유동인구_최대", "추정인구", "혼잡도", "평균속도(km/h)", "트래픽환산(Gbps)", "비고"]];
-    const lRows = results.map((r) => [
-      r.ts, r.source, r.code, r.name, r.lon, r.lat,
-      r.pop_min || "", r.pop_max || "", r.pop || "",
-      r.congest, r.speed || "", r.traffic_gbps, r.note || ""
-    ]);
+    const lHeader = [["수집시각", "구분", "코드", "장소명", "경도", "위도", "유동인구_최소", "유동인구_최대", "추정인구", "혼잡도", "평균속도(km/h)", "트래픽환산(Gbps)", "비고", "상세JSON"]];
+    const lRows = results.map((r) => {
+      const extra = {};
+      if (r.category) extra.category = r.category;
+      if (r.male_pct) extra.male_pct = r.male_pct;
+      if (r.female_pct) extra.female_pct = r.female_pct;
+      if (r.resnt_pct) extra.resnt_pct = r.resnt_pct;
+      if (r.non_resnt_pct) extra.non_resnt_pct = r.non_resnt_pct;
+      if (r.ages) extra.ages = r.ages;
+      if (r.fcst) extra.fcst = r.fcst;
+      return [
+        r.ts, r.source, r.code, r.name, r.lon, r.lat,
+        r.pop_min || "", r.pop_max || "", r.pop || "",
+        r.congest, r.speed || "", r.traffic_gbps, r.note || "",
+        Object.keys(extra).length ? JSON.stringify(extra) : ""
+      ];
+    });
     latestSheet.clearContents();
     const outLatest = lHeader.concat(lRows);
     latestSheet.getRange(1, 1, outLatest.length, lHeader[0].length).setValues(outLatest);
@@ -470,10 +481,17 @@ function fetchSeoulPopBatch_(pois, apiKey, tsFallback) {
         // 유동인구 -> 모바일 트래픽 환산 (1인당 피크 평균 활동 기반 환산 지수, 지도 스케일 정합)
         const congestBoost = congest === "붐빔" ? 1.35 : congest === "약간 붐빔" ? 1.15 : congest === "여유" ? 0.85 : 1.0;
         const trafficGbps = Number(Math.max(1.2, (popEst / 1400) * congestBoost).toFixed(2));
+        const ages = [0, 10, 20, 30, 40, 50, 60, 70].map((a) => Number(parsed["PPLTN_RATE_" + a]) || 0);
+        const rawFcst = Array.isArray(parsed.FCST_PPLTN) ? parsed.FCST_PPLTN : [];
+        const fcst = rawFcst.slice(0, 12).map((f) => {
+          const mn = Number(f.FCST_PPLTN_MIN) || 0;
+          const mx = Number(f.FCST_PPLTN_MAX) || mn;
+          return [String(f.FCST_TIME || "").slice(-5), Math.round((mn + mx) / 2), String(f.FCST_CONGEST_LVL || "보통").trim()];
+        }).filter((f) => f[0]);
         out.push({
           ts: String(parsed.PPLTN_TIME || tsFallback),
           source: "seoul_pop",
-          code: p.code,
+          code: String(parsed.AREA_CD || p.code),
           name: String(parsed.AREA_NM || p.name),
           lon: p.lon,
           lat: p.lat,
@@ -483,7 +501,13 @@ function fetchSeoulPopBatch_(pois, apiKey, tsFallback) {
           congest: congest,
           speed: 0,
           traffic_gbps: trafficGbps,
-          note: String(parsed.AREA_CONGEST_MSG || "").slice(0, 60),
+          note: String(parsed.AREA_CONGEST_MSG || "").slice(0, 120),
+          male_pct: Number(parsed.MALE_PPLTN_RATE) || 0,
+          female_pct: Number(parsed.FEMALE_PPLTN_RATE) || 0,
+          resnt_pct: Number(parsed.RESNT_PPLTN_RATE) || 0,
+          non_resnt_pct: Number(parsed.NON_RESNT_PPLTN_RATE) || 0,
+          ages: ages.some((v) => v > 0) ? ages : undefined,
+          fcst: fcst.length > 0 ? fcst : undefined,
         });
       } catch (_) {}
     }
@@ -822,13 +846,18 @@ function buildLatestPayload_() {
     const data = [];
     let updatedAt = "";
     if (sh && sh.getLastRow() >= 2) {
-      const rows = sh.getRange(2, 1, sh.getLastRow() - 1, 13).getValues();
+      const colCnt = Math.min(14, Math.max(13, sh.getLastColumn()));
+      const rows = sh.getRange(2, 1, sh.getLastRow() - 1, colCnt).getValues();
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
         if (!updatedAt && r[0]) updatedAt = formatCellDate_(r[0]);
         const lon = Number(r[4]), lat = Number(r[5]);
         if (isNaN(lon) || isNaN(lat)) continue;
-        data.push({
+        let extra = {};
+        if (colCnt >= 14 && r[13]) {
+          try { extra = JSON.parse(String(r[13])); } catch (_) {}
+        }
+        data.push(Object.assign({
           ts: formatCellDate_(r[0]),
           source: String(r[1] || ""),
           code: String(r[2] || ""),
@@ -842,7 +871,7 @@ function buildLatestPayload_() {
           speed: Number(r[10]) || 0,
           traffic_gbps: Number(r[11]) || 0,
           note: String(r[12] || ""),
-        });
+        }, extra));
       }
     }
     const datesObj = buildDatesPayload_();
@@ -990,12 +1019,23 @@ function doPost(e) {
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const latestSheet = ss.getSheetByName(SHEET_LATEST) || ss.insertSheet(SHEET_LATEST);
-    const lHeader = [["수집시각", "구분", "코드", "장소명", "경도", "위도", "유동인구_최소", "유동인구_최대", "추정인구", "혼잡도", "평균속도(km/h)", "트래픽환산(Gbps)", "비고"]];
-    const lRows = results.map((r) => [
-      r.ts || tsFull, r.source || "", r.code || "", r.name || "", Number(r.lon) || 0, Number(r.lat) || 0,
-      Number(r.pop_min) || "", Number(r.pop_max) || "", Number(r.pop) || "",
-      String(r.congest || ""), Number(r.speed) || "", Number(r.traffic_gbps) || 0, String(r.note || "")
-    ]);
+    const lHeader = [["수집시각", "구분", "코드", "장소명", "경도", "위도", "유동인구_최소", "유동인구_최대", "추정인구", "혼잡도", "평균속도(km/h)", "트래픽환산(Gbps)", "비고", "상세JSON"]];
+    const lRows = results.map((r) => {
+      const extra = {};
+      if (r.category) extra.category = r.category;
+      if (r.male_pct) extra.male_pct = r.male_pct;
+      if (r.female_pct) extra.female_pct = r.female_pct;
+      if (r.resnt_pct) extra.resnt_pct = r.resnt_pct;
+      if (r.non_resnt_pct) extra.non_resnt_pct = r.non_resnt_pct;
+      if (r.ages) extra.ages = r.ages;
+      if (r.fcst) extra.fcst = r.fcst;
+      return [
+        r.ts || tsFull, r.source || "", r.code || "", r.name || "", Number(r.lon) || 0, Number(r.lat) || 0,
+        Number(r.pop_min) || "", Number(r.pop_max) || "", Number(r.pop) || "",
+        String(r.congest || ""), Number(r.speed) || "", Number(r.traffic_gbps) || 0, String(r.note || ""),
+        Object.keys(extra).length ? JSON.stringify(extra) : ""
+      ];
+    });
     latestSheet.clearContents();
     const outLatest = lHeader.concat(lRows);
     latestSheet.getRange(1, 1, outLatest.length, lHeader[0].length).setValues(outLatest);

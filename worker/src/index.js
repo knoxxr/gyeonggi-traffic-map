@@ -51,6 +51,23 @@ function parseXmlTag(xml, tag) {
   return m ? m[1].trim() : "";
 }
 
+function parseXmlForecasts(xml) {
+  const out = [];
+  const re = /<FCST_PPLTN>([\s\S]*?)<\/FCST_PPLTN>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    const block = m[1];
+    if (block.includes("<FCST_PPLTN>")) continue;
+    const t = parseXmlTag(block, "FCST_TIME");
+    if (!t) continue;
+    const mn = Number(parseXmlTag(block, "FCST_PPLTN_MIN")) || 0;
+    const mx = Number(parseXmlTag(block, "FCST_PPLTN_MAX")) || mn;
+    const lvl = parseXmlTag(block, "FCST_CONGEST_LVL") || "보통";
+    out.push([t.slice(-5), Math.round((mn + mx) / 2), lvl]);
+  }
+  return out.slice(0, 12);
+}
+
 async function fetchOneSeoulPoi(poi, apiKey, tsFallback) {
   const [code, category, name, lon, lat] = poi;
   // sample 키는 광화문·덕수궁 1곳만 지원
@@ -61,10 +78,19 @@ async function fetchOneSeoulPoi(poi, apiKey, tsFallback) {
     if (!resp.ok) return null;
     const txt = (await resp.text()).trim();
     let row = null;
+    let fcst = [];
     if (txt.startsWith("{")) {
       const json = JSON.parse(txt);
       const list = json["SeoulRtd.citydata_ppltn"];
       row = Array.isArray(list) ? list[0] : (list && typeof list === "object" ? list : null);
+      const rawFcst = row?.FCST_PPLTN;
+      if (Array.isArray(rawFcst)) {
+        fcst = rawFcst.slice(0, 12).map((f) => {
+          const mn = Number(f.FCST_PPLTN_MIN) || 0;
+          const mx = Number(f.FCST_PPLTN_MAX) || mn;
+          return [String(f.FCST_TIME || "").slice(-5), Math.round((mn + mx) / 2), String(f.FCST_CONGEST_LVL || "보통").trim()];
+        }).filter((f) => f[0]);
+      }
     } else if (txt.startsWith("<")) {
       if (!txt.includes("AREA_NM")) return null;
       row = {
@@ -74,8 +100,21 @@ async function fetchOneSeoulPoi(poi, apiKey, tsFallback) {
         AREA_CONGEST_MSG: parseXmlTag(txt, "AREA_CONGEST_MSG"),
         AREA_PPLTN_MIN: parseXmlTag(txt, "AREA_PPLTN_MIN"),
         AREA_PPLTN_MAX: parseXmlTag(txt, "AREA_PPLTN_MAX"),
+        MALE_PPLTN_RATE: parseXmlTag(txt, "MALE_PPLTN_RATE"),
+        FEMALE_PPLTN_RATE: parseXmlTag(txt, "FEMALE_PPLTN_RATE"),
+        RESNT_PPLTN_RATE: parseXmlTag(txt, "RESNT_PPLTN_RATE"),
+        NON_RESNT_PPLTN_RATE: parseXmlTag(txt, "NON_RESNT_PPLTN_RATE"),
+        PPLTN_RATE_0: parseXmlTag(txt, "PPLTN_RATE_0"),
+        PPLTN_RATE_10: parseXmlTag(txt, "PPLTN_RATE_10"),
+        PPLTN_RATE_20: parseXmlTag(txt, "PPLTN_RATE_20"),
+        PPLTN_RATE_30: parseXmlTag(txt, "PPLTN_RATE_30"),
+        PPLTN_RATE_40: parseXmlTag(txt, "PPLTN_RATE_40"),
+        PPLTN_RATE_50: parseXmlTag(txt, "PPLTN_RATE_50"),
+        PPLTN_RATE_60: parseXmlTag(txt, "PPLTN_RATE_60"),
+        PPLTN_RATE_70: parseXmlTag(txt, "PPLTN_RATE_70"),
         PPLTN_TIME: parseXmlTag(txt, "PPLTN_TIME"),
       };
+      fcst = parseXmlForecasts(txt);
     }
     if (!row || !row.AREA_CONGEST_LVL) return null;
     const popMin = Number(row.AREA_PPLTN_MIN) || 0;
@@ -84,6 +123,7 @@ async function fetchOneSeoulPoi(poi, apiKey, tsFallback) {
     const congest = String(row.AREA_CONGEST_LVL || "보통").trim();
     const boost = congest === "붐빔" ? 1.35 : congest === "약간 붐빔" ? 1.15 : congest === "여유" ? 0.85 : 1.0;
     const trafficGbps = Number(Math.max(1.2, (pop / 1400) * boost).toFixed(2));
+    const ages = [0, 10, 20, 30, 40, 50, 60, 70].map((a) => Number(row[`PPLTN_RATE_${a}`]) || 0);
     return {
       ts: String(row.PPLTN_TIME || tsFallback),
       source: "seoul_pop",
@@ -98,7 +138,13 @@ async function fetchOneSeoulPoi(poi, apiKey, tsFallback) {
       congest,
       speed: 0,
       traffic_gbps: trafficGbps,
-      note: String(row.AREA_CONGEST_MSG || "").slice(0, 60),
+      note: String(row.AREA_CONGEST_MSG || "").slice(0, 120),
+      male_pct: Number(row.MALE_PPLTN_RATE) || 0,
+      female_pct: Number(row.FEMALE_PPLTN_RATE) || 0,
+      resnt_pct: Number(row.RESNT_PPLTN_RATE) || 0,
+      non_resnt_pct: Number(row.NON_RESNT_PPLTN_RATE) || 0,
+      ages: ages.some((v) => v > 0) ? ages : undefined,
+      fcst: fcst.length > 0 ? fcst : undefined,
     };
   } catch {
     return null;
