@@ -8,6 +8,9 @@
 - **무료($0/월) 완전 지원 (`free_chunked`)**: Cloudflare 무료 플랜의 호출당 50 subrequest 한도를 넘지 않도록 165곳을 4개 샤드(41·41·39·44곳)로 나눠 2분마다 순환 수집 → **8분마다 전국 165곳 전체 갱신**.
 - **유료 플랜 5분 일괄 수집 (`full`)**: `wrangler.toml`에서 `COLLECT_MODE = "full"`, `crons = ["*/5 * * * *"]`로 바꾸면 5분마다 165곳 전체를 3초 내 일괄 수집.
 - **KV 90일 히스토리 내장**: `TRAFFIC_KV`를 연결하면 앱의 **`Drive 히스토리`** 탭에서 날짜별 24시간 재생이 그대로 동작합니다.
+- **동시 접속 한도 완벽 보호 (3-Tier 캐시 + Single-Flight + ETag 304)**:
+  - 업스트림 API(서울·ITS·Radar)는 **Cron 트리거에서만 호출**되므로 접속자가 10명이든 10만 명이든 공공 API 호출 횟수는 0으로 고정됩니다.
+  - 요청은 **L1 Isolate RAM 캐시(60초) → L2 Cloudflare Edge Cache(120초, 과거 히스토리 6시간) → L3 KV** 순으로 처리되고, 동시 미스는 Single-Flight로 1회만 읽어 KV 무료 한도(일 10만 읽기)도 안전합니다.
 - **Google Drive 스프레드시트 자동 연동(선택)**: `GAS_INGEST_URL` 시크릿에 `gas/Code.gs` 웹 앱 URL을 넣어두면, Worker가 165곳을 모을 때마다 Google 스프레드시트로 1회 POST 전달 → **Apps Script 무료 호출 한도(일 2만회)를 0회만 쓰면서 내 Google Drive에 5~8분 간격으로 영구 누적**됩니다.
 
 ---

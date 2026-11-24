@@ -527,12 +527,13 @@
               <input id="apiAuthInput" type="text" placeholder="비워두거나 token 값 / Bearer ..." class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none focus:border-[var(--primary)] font-mono text-xs" />
             </div>
             <div>
-              <label for="apiIntervalSelect" class="block font-medium mb-1">자동 갱신 주기</label>
+              <label for="apiIntervalSelect" class="block font-medium mb-1">자동 갱신 주기 (지터·멀티탭 공유 자동 적용)</label>
               <select id="apiIntervalSelect" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] outline-none cursor-pointer">
-                <option value="10">10초마다 갱신</option>
-                <option value="30" selected>30초마다 갱신</option>
+                <option value="120">2분마다 갱신 (캐시·304)</option>
+                <option value="300" selected>5분마다 갱신 (권장 · 한도 안전)</option>
+                <option value="600">10분마다 갱신 (저부하)</option>
                 <option value="60">1분마다 갱신</option>
-                <option value="300">5분마다 갱신</option>
+                <option value="30">30초마다 갱신 (사내 전용)</option>
               </select>
             </div>
           </div>
@@ -3466,40 +3467,155 @@
       return { matched: matchedDongs + matchedCoords, mode: matchedCoords > 0 ? "서울 인파·전국 ITS 하이브리드" : "행정동 스냅샷" };
     }
 
-    async function fetchExternalApiOnce() {
+    // Concurrency & Rate-Limit Shield: Cross-Tab Sharing + Shared Cache + ETag 304 + Jitter + Backoff
+    const liveBus = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("kr_traffic_live_v1") : null;
+    const pollGuard = { etag: "", failCount: 0, lastFetchedAt: 0, lastUrl: "" };
+
+    function readSharedLiveCache(url, maxAgeMs) {
+      try {
+        const raw = localStorage.getItem("kr_live_cache_v1");
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (obj && obj.url === url && (Date.now() - obj.ts) < maxAgeMs && obj.json) return obj;
+      } catch (_) {}
+      return null;
+    }
+
+    function writeSharedLiveCache(url, json, etag) {
+      try {
+        localStorage.setItem("kr_live_cache_v1", JSON.stringify({ url, ts: Date.now(), etag: etag || "", json }));
+      } catch (_) {}
+    }
+
+    if (liveBus) {
+      liveBus.onmessage = (ev) => {
+        const msg = ev && ev.data;
+        if (!msg || msg.type !== "payload" || !liveState.enabled || liveState.source !== "api") return;
+        if (msg.url !== liveState.apiUrl) return;
+        try {
+          const res = applyLiveApiPayload(msg.json);
+          const kst = getKstNow();
+          pollGuard.lastFetchedAt = Date.now();
+          if (msg.etag) pollGuard.etag = msg.etag;
+          liveState.pollCount++; liveState.lastSyncStr = msg.json.updated_at ? String(msg.json.updated_at).slice(-5) : kst.hhmmss; liveState.kstClockStr = kst.hhmmss;
+          renderCrowdPanel();
+          apiStatusBox.classList.remove("hidden");
+          apiStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">멀티탭 캐시 공유 (${kst.hhmmss} KST · #${liveState.pollCount})</span><br/>다른 탭이 수신한 ${res.matched.toLocaleString()}개 항목을 API 추가 호출 없이 동기화했습니다.`;
+          syncKstClock(true);
+        } catch (_) {}
+      };
+    }
+
+    async function fetchExternalApiOnce(opts = {}) {
       const rawUrl = apiUrlInput.value.trim();
-      if (!rawUrl) { apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">API URL을 입력해 주세요.</span>`; return false; }
+      if (!rawUrl) { apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">API URL을 입력해 주세요.</span>`; return { ok: false, retrySec: 60 }; }
+
+      // 최근 90초 이내에 다른 탭/새로고침에서 받은 동일 URL 캐시가 있으면 재사용 (동시 호출 절감)
+      const cacheWindowMs = Math.min(90000, Math.max(30000, (liveState.intervalSec || 300) * 500));
+      if (!opts.forceFresh) {
+        const shared = readSharedLiveCache(rawUrl, cacheWindowMs);
+        if (shared) {
+          const res = applyLiveApiPayload(shared.json);
+          const kst = getKstNow();
+          pollGuard.lastFetchedAt = shared.ts;
+          if (shared.etag) pollGuard.etag = shared.etag;
+          liveState.pollCount++; liveState.lastSyncStr = shared.json.updated_at ? String(shared.json.updated_at).slice(-5) : kst.hhmmss; liveState.kstClockStr = kst.hhmmss;
+          renderCrowdPanel();
+          apiStatusBox.classList.remove("hidden");
+          apiStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">로컬 캐시 재사용 (${kst.hhmmss} KST · #${liveState.pollCount})</span><br/>${res.matched.toLocaleString()}개 항목(${res.mode}) — API 한도 보호 중`;
+          syncKstClock(true);
+          return { ok: true };
+        }
+      }
+
       const authRaw = apiAuthInput.value.trim();
-      const isBuiltInProxy = rawUrl.includes("script.google.com") || rawUrl.includes("script.googleusercontent.com") || rawUrl.includes("workers.dev");
+      const isGas = rawUrl.includes("script.google.com") || rawUrl.includes("script.googleusercontent.com");
+      const isWorker = rawUrl.includes("workers.dev");
       let reqUrl = rawUrl;
-      const fetchOpts = { cache: "no-store" };
-      if (isBuiltInProxy) {
+      const fetchOpts = {};
+      if (isGas || isWorker) {
         const tk = authRaw && !authRaw.includes(":") && !authRaw.toLowerCase().startsWith("bearer ") ? authRaw : historyTokenInput.value.trim();
         reqUrl = buildGasUrl(rawUrl, { mode: "latest", token: tk });
+        // Worker는 ETag 304 지원 (GAS는 CORS preflight 방지를 위해 커스텀 헤더 생략)
+        if (isWorker && pollGuard.etag && pollGuard.lastUrl === rawUrl) {
+          fetchOpts.headers = { "If-None-Match": pollGuard.etag };
+        }
       } else {
         const headers = { Accept: "application/json" };
         if (authRaw) { const c = authRaw.indexOf(":"); if (c > 0) headers[authRaw.slice(0, c).trim()] = authRaw.slice(c + 1).trim(); else headers["Authorization"] = authRaw; }
+        if (pollGuard.etag && pollGuard.lastUrl === rawUrl) headers["If-None-Match"] = pollGuard.etag;
         fetchOpts.headers = headers;
       }
+
       apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="text-[var(--muted-foreground)]">데이터 수신 중...</span>`;
       try {
         const resp = await fetch(reqUrl, fetchOpts);
+        if (resp.status === 304) {
+          pollGuard.failCount = 0; pollGuard.lastFetchedAt = Date.now();
+          const kst = getKstNow();
+          liveState.pollCount++; liveState.kstClockStr = kst.hhmmss;
+          apiStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">최신 상태 유지 · HTTP 304 (${kst.hhmmss} KST)</span><br/>변경 없음 — 데이터 전송량·한도를 절약했습니다.`;
+          return { ok: true, serverNextSec: Number(resp.headers.get("X-Next-Poll-Sec") || 0) };
+        }
+        if (resp.status === 429) {
+          const retryHdr = parseInt(resp.headers.get("Retry-After") || "120", 10) || 120;
+          throw Object.assign(new Error(`HTTP 429 요청 한도 도달`), { retryAfterSec: retryHdr });
+        }
         if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+
+        const etag = resp.headers.get("ETag") || "";
+        const cacheTag = resp.headers.get("X-Cache") || "";
+        const serverNextSec = Number(resp.headers.get("X-Next-Poll-Sec") || 0);
         const json = await resp.json();
         const res = applyLiveApiPayload(json);
         const kst = getKstNow();
+        pollGuard.failCount = 0; pollGuard.lastFetchedAt = Date.now(); pollGuard.lastUrl = rawUrl;
+        if (etag) pollGuard.etag = etag;
+        writeSharedLiveCache(rawUrl, json, etag);
+        if (liveBus) { try { liveBus.postMessage({ type: "payload", url: rawUrl, json, etag }); } catch (_) {} }
+
         liveState.pollCount++; liveState.lastSyncStr = json.updated_at ? String(json.updated_at).slice(-5) : kst.hhmmss; liveState.kstClockStr = kst.hhmmss;
         renderCrowdPanel();
-        apiStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">수신 성공 (${kst.hhmmss} KST · #${liveState.pollCount})</span><br/>${res.matched.toLocaleString()}개 항목(${res.mode})이 전국 지도에 실시간 반영되었습니다.`;
-        syncKstClock(true); return true;
+        const cacheBadge = cacheTag ? ` · ${cacheTag}` : "";
+        apiStatusBox.innerHTML = `<span class="text-[#16a34a] font-semibold">수신 성공 (${kst.hhmmss} KST · #${liveState.pollCount}${cacheBadge})</span><br/>${res.matched.toLocaleString()}개 항목(${res.mode})이 전국 지도에 실시간 반영되었습니다.`;
+        syncKstClock(true);
+        return { ok: true, serverNextSec };
       } catch (err) {
-        apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">연결 실패:</span> ${err.message}<br/><span class="text-[var(--muted-foreground)]">GAS 웹 앱 배포 권한(모든 사용자) 또는 CORS 설정을 확인해 주세요.</span>`;
-        return false;
+        pollGuard.failCount = Math.min(5, pollGuard.failCount + 1);
+        const baseBackoff = err.retryAfterSec || Math.min(900, (liveState.intervalSec || 300) * Math.pow(2, pollGuard.failCount - 1));
+        apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">연결 일시 지연:</span> ${err.message}<br/><span class="text-[var(--muted-foreground)]">한도 보호 백오프 적용 — 약 ${Math.round(baseBackoff)}초 후 자동 재시도합니다.</span>`;
+        return { ok: false, retrySec: baseBackoff };
       }
     }
 
+    function scheduleNextApiPoll(overrideSec) {
+      if (liveState.pollTimer) { clearTimeout(liveState.pollTimer); liveState.pollTimer = null; }
+      if (!liveState.enabled || liveState.source !== "api") return;
+      const baseSec = Math.max(30, overrideSec || liveState.intervalSec || 300);
+      // ±15% 랜덤 지터로 동시 접속자 요청 분산 (Thundering Herd 방지)
+      const jitterMs = Math.round(baseSec * (0.85 + Math.random() * 0.30) * 1000);
+      liveState.pollTimer = setTimeout(async () => {
+        if (!liveState.enabled || liveState.source !== "api") return;
+        if (document.hidden) { scheduleNextApiPoll(baseSec); return; }
+        const r = await fetchExternalApiOnce({ forceFresh: false });
+        const nextSec = r.ok ? Math.max(liveState.intervalSec, r.serverNextSec || 0) : (r.retrySec || baseSec * 2);
+        scheduleNextApiPoll(nextSec);
+      }, jitterMs);
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && liveState.enabled && liveState.source === "api") {
+        const elapsed = (Date.now() - pollGuard.lastFetchedAt) / 1000;
+        if (elapsed >= Math.max(60, liveState.intervalSec || 300)) {
+          fetchExternalApiOnce({ forceFresh: false }).then((r) => {
+            scheduleNextApiPoll(r.ok ? liveState.intervalSec : (r.retrySec || liveState.intervalSec * 2));
+          });
+        }
+      }
+    });
+
     function stopApiPolling(updateUi = true) {
-      if (liveState.pollTimer) { clearInterval(liveState.pollTimer); liveState.pollTimer = null; }
+      if (liveState.pollTimer) { clearTimeout(liveState.pollTimer); liveState.pollTimer = null; }
       apiStartBtn.classList.remove("hidden"); apiStopBtn.classList.add("hidden");
       if (updateUi) updateLiveButtonUI();
     }
@@ -3507,20 +3623,21 @@
     apiStartBtn.addEventListener("click", async () => {
       const url = apiUrlInput.value.trim();
       if (!url) { apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="text-[#dc2626] font-semibold">연결할 JSON API URL을 입력해 주세요.</span>`; return; }
-      const sec = Math.max(5, parseInt(apiIntervalSelect.value, 10) || 30);
+      const sec = Math.max(30, parseInt(apiIntervalSelect.value, 10) || 300);
       try { localStorage.setItem("kr_live_api_url", url); localStorage.setItem("kr_live_api_interval", String(sec)); } catch (_) {}
       if (state.playing) togglePlay();
       exitHistoryMode(false);
       stopApiPolling(false);
+      pollGuard.failCount = 0; pollGuard.etag = ""; pollGuard.lastUrl = url;
       liveState.enabled = true; liveState.source = "api"; liveState.apiUrl = url; liveState.intervalSec = sec; liveState.pollCount = 0;
       liveBurstMul.fill(1.0); liveBurstPrev.fill(1.0);
       apiStartBtn.classList.add("hidden"); apiStopBtn.classList.remove("hidden");
       updateLiveButtonUI();
-      await fetchExternalApiOnce();
-      liveState.pollTimer = setInterval(() => { if (!document.hidden && liveState.enabled && liveState.source === "api") fetchExternalApiOnce(); }, sec * 1000);
+      const r = await fetchExternalApiOnce({ forceFresh: false });
+      scheduleNextApiPoll(r.ok ? Math.max(sec, r.serverNextSec || 0) : (r.retrySec || sec * 2));
     });
     apiStopBtn.addEventListener("click", () => { disableLiveMode(); apiStatusBox.classList.remove("hidden"); apiStatusBox.innerHTML = `<span class="font-semibold">실시간 API 폴링이 중지되었습니다.</span>`; });
-    document.getElementById("apiTestBtn").addEventListener("click", () => fetchExternalApiOnce());
+    document.getElementById("apiTestBtn").addEventListener("click", () => fetchExternalApiOnce({ forceFresh: true }));
     document.getElementById("apiDemoKstBtn").addEventListener("click", () => { enableLiveKstMode(); uploadModal.classList.add("hidden"); });
 
     // -----------------------------------------------------------------------

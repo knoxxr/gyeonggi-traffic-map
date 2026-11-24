@@ -15,7 +15,8 @@ const CONGEST_RANK = { "붐빔": 4, "정체": 4, "약간 붐빔": 3, "서행": 3
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, If-None-Match",
+  "Access-Control-Expose-Headers": "ETag, X-Cache, X-Next-Poll-Sec",
 };
 
 function jsonResponse(data, status = 200, extraHeaders = {}) {
@@ -472,6 +473,96 @@ function isAuthorized(request, env, url) {
   return auth === reqToken;
 }
 
+// ============================================================================
+// 동시 접속 보호 레이어:
+//   L1 Isolate RAM 마이크로캐시 -> L2 Cloudflare Edge Cache -> L3 KV
+//   + Single-Flight 요청 병합 (Cache Stampede 원천 차단) + ETag 304 응답
+// ============================================================================
+const memCache = new Map(); // key -> { exp, body, etag }
+const inflight = new Map(); // key -> Promise<{ body, etag }>
+let lastManualCollectMs = 0;
+
+function computeWeakEtag(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `W/"${(h >>> 0).toString(36)}-${str.length.toString(36)}"`;
+}
+
+function getEdgeCache() {
+  return (typeof caches !== "undefined" && caches && caches.default) ? caches.default : null;
+}
+
+async function serveCachedJson(request, ctx, { cacheKey, memTtlSec, edgeTtlSec, browserTtlSec, loader }) {
+  const now = Date.now();
+  const inm = (request.headers.get("If-None-Match") || "").trim();
+
+  const buildResp = (body, etag, cacheStatus) => {
+    const headers = {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": `public, max-age=${browserTtlSec}, s-maxage=${edgeTtlSec}, stale-while-revalidate=${edgeTtlSec * 2}`,
+      ETag: etag,
+      "X-Cache": cacheStatus,
+      "X-Next-Poll-Sec": String(Math.max(120, edgeTtlSec)),
+      ...CORS_HEADERS,
+    };
+    if (inm && inm === etag) {
+      return new Response(null, { status: 304, headers });
+    }
+    return new Response(body, { status: 200, headers });
+  };
+
+  // L1: Isolate RAM cache (0ms, 0 KV reads)
+  const mHit = memCache.get(cacheKey);
+  if (mHit && mHit.exp > now) {
+    return buildResp(mHit.body, mHit.etag, "HIT-RAM");
+  }
+
+  // L2: Cloudflare Edge Cache (PoP-wide, 0 KV reads)
+  const edge = getEdgeCache();
+  const edgeReq = edge ? new Request(`https://cache.internal/${encodeURIComponent(cacheKey)}`) : null;
+  if (edge && edgeReq) {
+    const eHit = await edge.match(edgeReq);
+    if (eHit) {
+      const body = await eHit.text();
+      const etag = eHit.headers.get("ETag") || computeWeakEtag(body);
+      memCache.set(cacheKey, { exp: now + memTtlSec * 1000, body, etag });
+      return buildResp(body, etag, "HIT-EDGE");
+    }
+  }
+
+  // Single-Flight: 동시 미스 시 단 1건의 loader만 실행하고 나머지 요청은 결과를 공유
+  let p = inflight.get(cacheKey);
+  if (!p) {
+    p = (async () => {
+      const obj = await loader();
+      const body = JSON.stringify(obj);
+      const etag = computeWeakEtag(body);
+      memCache.set(cacheKey, { exp: Date.now() + memTtlSec * 1000, body, etag });
+      if (edge && edgeReq) {
+        const edgeResp = new Response(body, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": `public, max-age=${edgeTtlSec}`,
+            ETag: etag,
+          },
+        });
+        ctx.waitUntil(edge.put(edgeReq, edgeResp));
+      }
+      return { body, etag };
+    })().finally(() => {
+      inflight.delete(cacheKey);
+    });
+    inflight.set(cacheKey, p);
+  }
+
+  const { body, etag } = await p;
+  return buildResp(body, etag, "MISS");
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
@@ -482,20 +573,29 @@ export default {
     const mode = (url.searchParams.get("mode") || path || "latest").toLowerCase();
 
     if (mode === "health") {
-      const kv = env.TRAFFIC_KV;
-      const latest = kv ? await kv.get("latest_payload", "json") : null;
-      return jsonResponse({
-        ok: true,
-        collect_mode: env.COLLECT_MODE || "free_chunked",
-        kv_bound: Boolean(kv),
-        seoul_key_set: Boolean(env.SEOUL_API_KEY && env.SEOUL_API_KEY !== "sample"),
-        its_key_set: Boolean(env.ITS_API_KEY),
-        cf_radar_set: Boolean(env.CF_RADAR_TOKEN),
-        gas_bridge_set: Boolean(env.GAS_INGEST_URL),
-        catalog: { seoul_pois: SEOUL_121_POIS.length, nationwide_its: NATIONWIDE_42_ITS.length },
-        last_updated: latest?.updated_at || null,
-        cached_count: latest?.count || 0,
-        radar_cached: Boolean(latest?.radar),
+      return serveCachedJson(request, ctx, {
+        cacheKey: "health_v1",
+        memTtlSec: 15,
+        edgeTtlSec: 30,
+        browserTtlSec: 15,
+        loader: async () => {
+          const kv = env.TRAFFIC_KV;
+          const latest = kv ? await kv.get("latest_payload", "json") : null;
+          return {
+            ok: true,
+            collect_mode: env.COLLECT_MODE || "free_chunked",
+            kv_bound: Boolean(kv),
+            seoul_key_set: Boolean(env.SEOUL_API_KEY && env.SEOUL_API_KEY !== "sample"),
+            its_key_set: Boolean(env.ITS_API_KEY),
+            cf_radar_set: Boolean(env.CF_RADAR_TOKEN),
+            gas_bridge_set: Boolean(env.GAS_INGEST_URL),
+            concurrency_shield: "L1-RAM + L2-EdgeCache + SingleFlight + ETag304",
+            catalog: { seoul_pois: SEOUL_121_POIS.length, nationwide_its: NATIONWIDE_42_ITS.length },
+            last_updated: latest?.updated_at || null,
+            cached_count: latest?.count || 0,
+            radar_cached: Boolean(latest?.radar),
+          };
+        },
       });
     }
 
@@ -506,18 +606,35 @@ export default {
     const kv = env.TRAFFIC_KV;
 
     if (mode === "radar") {
-      const cached = kv ? await kv.get("radar_latest", "json") : null;
-      if (cached) return jsonResponse({ mode: "radar", radar: cached });
-      const fresh = await fetchCloudflareRadarKr(env, getKstStrings());
-      if (fresh && kv) await kv.put("radar_latest", JSON.stringify(fresh), { expirationTtl: 1800 });
-      return jsonResponse({ mode: "radar", radar: fresh });
+      return serveCachedJson(request, ctx, {
+        cacheKey: "radar_v1",
+        memTtlSec: 120,
+        edgeTtlSec: 300,
+        browserTtlSec: 180,
+        loader: async () => {
+          // KV에 Cron이 저장한 값 우선 사용 (유저 요청이 업스트림 API를 폭주시키지 않음)
+          const cached = kv ? await kv.get("radar_latest", "json") : null;
+          if (cached) return { mode: "radar", radar: cached };
+          const fresh = await fetchCloudflareRadarKr(env, getKstStrings());
+          if (fresh && kv) await kv.put("radar_latest", JSON.stringify(fresh), { expirationTtl: 1800 });
+          return { mode: "radar", radar: fresh };
+        },
+      });
     }
 
     if (mode === "dates") {
-      if (!kv) return jsonResponse({ mode: "dates", dates: [], note: "KV 바인딩이 필요합니다." });
-      const raw = (await kv.get("dates_index", "json")) || {};
-      const dates = Object.values(raw).sort((a, b) => b.date.localeCompare(a.date));
-      return jsonResponse({ mode: "dates", dates });
+      return serveCachedJson(request, ctx, {
+        cacheKey: "dates_v1",
+        memTtlSec: 120,
+        edgeTtlSec: 300,
+        browserTtlSec: 120,
+        loader: async () => {
+          if (!kv) return { mode: "dates", dates: [], note: "KV 바인딩이 필요합니다." };
+          const raw = (await kv.get("dates_index", "json")) || {};
+          const dates = Object.values(raw).sort((a, b) => b.date.localeCompare(a.date));
+          return { mode: "dates", dates };
+        },
+      });
     }
 
     if (mode === "history") {
@@ -525,39 +642,58 @@ export default {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
         return jsonResponse({ error: "date 파라미터는 YYYY-MM-DD 형식이어야 합니다." }, 400);
       }
-      if (!kv) return jsonResponse({ mode: "history", date: dateStr, times: [], snapshots: {} });
-      const data = await kv.get(`history:${dateStr}`, "json");
-      return jsonResponse(data || { mode: "history", date: dateStr, times: [], snapshots: {} });
+      const isToday = dateStr === getKstStrings().date;
+      return serveCachedJson(request, ctx, {
+        cacheKey: `history_v1_${dateStr}`,
+        memTtlSec: isToday ? 120 : 1800,
+        edgeTtlSec: isToday ? 240 : 21600, // 과거 날짜는 변하지 않으므로 6시간 Edge 캐시!
+        browserTtlSec: isToday ? 120 : 3600,
+        loader: async () => {
+          if (!kv) return { mode: "history", date: dateStr, times: [], snapshots: {} };
+          const data = await kv.get(`history:${dateStr}`, "json");
+          return data || { mode: "history", date: dateStr, times: [], snapshots: {} };
+        },
+      });
     }
 
     if (mode === "collect") {
+      // 동시/반복 수동 수집 남용 방지 (60초 쿨다운)
+      const now = Date.now();
+      if (now - lastManualCollectMs < 60000) {
+        return jsonResponse({
+          ok: false,
+          error: "Too Many Requests: 수동 수집은 60초에 1회만 허용됩니다.",
+          retry_after_sec: Math.ceil((60000 - (now - lastManualCollectMs)) / 1000),
+        }, 429, { "Retry-After": "60" });
+      }
+      lastManualCollectMs = now;
       const forced = url.searchParams.get("full") === "1" ? "full" : undefined;
       const res = await collectScheduled(env, forced);
+      memCache.delete("latest_v1");
+      memCache.delete("dates_v1");
       return jsonResponse({ ok: true, ...res });
     }
 
-    // Default: mode === "latest"
-    if (kv) {
-      const cached = await kv.get("latest_payload", "json");
-      if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
-        return jsonResponse(cached, 200, { "Cache-Control": "public, max-age=30" });
-      }
-      // 아직 Cron 실행 전이면 1회 샤드 수집 후 반환
-      await collectScheduled(env);
-      const fresh = await kv.get("latest_payload", "json");
-      if (fresh) return jsonResponse(fresh);
-    }
-
-    // KV 미연결 시 Edge Cache(5분) 활용 즉석 모드
-    const cache = caches.default;
-    const cacheKey = new Request(`${url.origin}/__ondemand_latest_v1`);
-    const edgeHit = await cache.match(cacheKey);
-    if (edgeHit) return edgeHit;
-
-    const onDemand = await collectOnDemandNoKv(env);
-    const resp = jsonResponse(onDemand, 200, { "Cache-Control": "public, max-age=300" });
-    ctx.waitUntil(cache.put(cacheKey, resp.clone()));
-    return resp;
+    // Default: mode === "latest" (L1 RAM 60s + L2 Edge 120s + L3 KV -> 1만 동접에도 업스트림 호출 0회!)
+    return serveCachedJson(request, ctx, {
+      cacheKey: "latest_v1",
+      memTtlSec: 60,
+      edgeTtlSec: kv ? 120 : 300,
+      browserTtlSec: 60,
+      loader: async () => {
+        if (kv) {
+          const cached = await kv.get("latest_payload", "json");
+          if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
+            return cached;
+          }
+          // 최초 배포 직후 Cron 실행 전 1회만 수집 (Single-Flight 보호로 동시 1회만 실행!)
+          await collectScheduled(env);
+          const fresh = await kv.get("latest_payload", "json");
+          if (fresh) return fresh;
+        }
+        return collectOnDemandNoKv(env);
+      },
+    });
   },
 
   async scheduled(event, env, ctx) {

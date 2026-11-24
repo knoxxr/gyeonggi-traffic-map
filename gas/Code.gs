@@ -421,13 +421,18 @@ function collectAll() {
       histSheet.getRange(startRow, 1, hRows.length, hRows[0].length).setValues(hRows);
     }
 
+    // 2.5) Cloudflare Radar KR은 수집 트리거에서만 갱신 (유저 doGet에서 업스트림 호출 0회 보장)
+    if (cfg["CF_RADAR_TOKEN"]) {
+      fetchCloudflareRadarKr_(cfg["CF_RADAR_TOKEN"]);
+    }
+
     updateConfigValue_("최근_수집시각", tsFull);
     updateConfigValue_("최근_수집건수", `${results.length} (서울 ${seoulCount} + ITS ${itsCount})`);
 
-    // 캐시 무효화
-    const cache = CacheService.getScriptCache();
-    cache.remove("latest_payload");
-    cache.remove("dates_payload");
+    // 캐시 무효화 (분할 캐시 포함)
+    clearChunkedCache_("latest_payload");
+    clearChunkedCache_("dates_payload");
+    clearChunkedCache_("hist_" + dateStr);
 
     return { timestamp: tsFull, seoulCount, itsCount, historySheet: histName };
   } finally {
@@ -743,76 +748,123 @@ function fetchCloudflareRadarKr_(token) {
   }
 }
 
+// 대용량 JSON(>100KB)도 CacheService에 분할 저장해 동시접속 시 시트 I/O를 0으로 줄임
+function putChunkedCache_(key, obj, ttlSec) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const str = JSON.stringify(obj);
+    const CHUNK = 85000;
+    const n = Math.ceil(str.length / CHUNK);
+    if (n > 8) return;
+    const map = {};
+    map[key + "_n"] = String(n);
+    for (let i = 0; i < n; i++) map[key + "_" + i] = str.slice(i * CHUNK, (i + 1) * CHUNK);
+    cache.putAll(map, ttlSec);
+  } catch (_) {}
+}
+
+function getChunkedCache_(key) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const nStr = cache.get(key + "_n");
+    if (!nStr) return null;
+    const n = parseInt(nStr, 10);
+    if (!n || n < 1 || n > 8) return null;
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push(key + "_" + i);
+    const parts = cache.getAll(keys);
+    let out = "";
+    for (let i = 0; i < n; i++) {
+      if (parts[keys[i]] == null) return null;
+      out += parts[keys[i]];
+    }
+    return JSON.parse(out);
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearChunkedCache_(key) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const keys = [key, key + "_n"];
+    for (let i = 0; i < 8; i++) keys.push(key + "_" + i);
+    cache.removeAll(keys);
+  } catch (_) {}
+}
+
+// doGet에서는 절대 외부 UrlFetchApp을 호출하지 않음 (저장된 Radar 스냅샷만 반환 -> API 한도 완벽 보호)
 function getSavedOrFreshRadar_(cfg) {
   const cache = CacheService.getScriptCache();
   const cHit = cache.get("radar_kr");
   if (cHit) return JSON.parse(cHit);
-  const tok = String((cfg && cfg["CF_RADAR_TOKEN"]) || "").trim();
-  if (tok) {
-    const fresh = fetchCloudflareRadarKr_(tok);
-    if (fresh) {
-      try { cache.put("radar_kr", JSON.stringify(fresh), 300); } catch (_) {}
-      return fresh;
-    }
-  }
   const saved = PropertiesService.getScriptProperties().getProperty("RADAR_KR_JSON");
-  return saved ? JSON.parse(saved) : null;
+  if (saved) {
+    try { cache.put("radar_kr", saved, 300); } catch (_) {}
+    return JSON.parse(saved);
+  }
+  return null;
 }
 
 function buildLatestPayload_() {
-  const cache = CacheService.getScriptCache();
-  const hit = cache.get("latest_payload");
-  if (hit) return JSON.parse(hit);
+  const hit = getChunkedCache_("latest_payload");
+  if (hit) return hit;
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sh = ss.getSheetByName(SHEET_LATEST);
-  const data = [];
-  let updatedAt = "";
-  if (sh && sh.getLastRow() >= 2) {
-    const rows = sh.getRange(2, 1, sh.getLastRow() - 1, 13).getValues();
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      if (!updatedAt && r[0]) updatedAt = formatCellDate_(r[0]);
-      const lon = Number(r[4]), lat = Number(r[5]);
-      if (isNaN(lon) || isNaN(lat)) continue;
-      data.push({
-        ts: formatCellDate_(r[0]),
-        source: String(r[1] || ""),
-        code: String(r[2] || ""),
-        name: String(r[3] || ""),
-        lon: lon,
-        lat: lat,
-        pop_min: Number(r[6]) || 0,
-        pop_max: Number(r[7]) || 0,
-        pop: Number(r[8]) || 0,
-        congest: String(r[9] || ""),
-        speed: Number(r[10]) || 0,
-        traffic_gbps: Number(r[11]) || 0,
-        note: String(r[12] || ""),
-      });
-    }
-  }
-  const datesObj = buildDatesPayload_();
-  const radarObj = getSavedOrFreshRadar_(readConfig_());
-  const payload = {
-    mode: "latest",
-    updated_at: updatedAt,
-    radar: radarObj,
-    count: data.length,
-    dates: datesObj.dates.map((d) => d.date),
-    data: data,
-  };
+  const lock = LockService.getScriptLock();
+  const gotLock = lock.tryLock(8000);
   try {
-    const str = JSON.stringify(payload);
-    if (str.length < 95000) cache.put("latest_payload", str, 180);
-  } catch (_) {}
-  return payload;
+    if (gotLock) {
+      const hit2 = getChunkedCache_("latest_payload");
+      if (hit2) return hit2;
+    }
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sh = ss.getSheetByName(SHEET_LATEST);
+    const data = [];
+    let updatedAt = "";
+    if (sh && sh.getLastRow() >= 2) {
+      const rows = sh.getRange(2, 1, sh.getLastRow() - 1, 13).getValues();
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (!updatedAt && r[0]) updatedAt = formatCellDate_(r[0]);
+        const lon = Number(r[4]), lat = Number(r[5]);
+        if (isNaN(lon) || isNaN(lat)) continue;
+        data.push({
+          ts: formatCellDate_(r[0]),
+          source: String(r[1] || ""),
+          code: String(r[2] || ""),
+          name: String(r[3] || ""),
+          lon: lon,
+          lat: lat,
+          pop_min: Number(r[6]) || 0,
+          pop_max: Number(r[7]) || 0,
+          pop: Number(r[8]) || 0,
+          congest: String(r[9] || ""),
+          speed: Number(r[10]) || 0,
+          traffic_gbps: Number(r[11]) || 0,
+          note: String(r[12] || ""),
+        });
+      }
+    }
+    const datesObj = buildDatesPayload_();
+    const radarObj = getSavedOrFreshRadar_(null);
+    const payload = {
+      mode: "latest",
+      updated_at: updatedAt,
+      radar: radarObj,
+      count: data.length,
+      dates: datesObj.dates.map((d) => d.date),
+      data: data,
+    };
+    putChunkedCache_("latest_payload", payload, 300);
+    return payload;
+  } finally {
+    if (gotLock) lock.releaseLock();
+  }
 }
 
 function buildDatesPayload_() {
-  const cache = CacheService.getScriptCache();
-  const hit = cache.get("dates_payload");
-  if (hit) return JSON.parse(hit);
+  const hit = getChunkedCache_("dates_payload");
+  if (hit) return hit;
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
@@ -822,7 +874,6 @@ function buildDatesPayload_() {
     const sh = sheets[s];
     const name = sh.getName();
     if (!name.startsWith(HISTORY_PREFIX) || sh.getLastRow() < 2) continue;
-    // 날짜(col 2), 시분(col 3)만 빠르게 읽기
     const cols = sh.getRange(2, 2, sh.getLastRow() - 1, 2).getValues();
     for (let i = 0; i < cols.length; i++) {
       const d = formatDateOnly_(cols[i][0]);
@@ -844,13 +895,15 @@ function buildDatesPayload_() {
     }));
 
   const payload = { mode: "dates", dates: dates };
-  try {
-    cache.put("dates_payload", JSON.stringify(payload), 180);
-  } catch (_) {}
+  putChunkedCache_("dates_payload", payload, 300);
   return payload;
 }
 
 function buildHistoryPayload_(dateStr) {
+  const cacheKey = "hist_" + dateStr;
+  const hit = getChunkedCache_(cacheKey);
+  if (hit) return hit;
+
   const ym = dateStr.replace(/-/g, "").slice(0, 6);
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(HISTORY_PREFIX + ym);
@@ -881,7 +934,10 @@ function buildHistoryPayload_(dateStr) {
   }
 
   const times = Object.keys(snapshots).sort();
-  return { mode: "history", date: dateStr, count: times.length, times: times, snapshots: snapshots };
+  const payload = { mode: "history", date: dateStr, count: times.length, times: times, snapshots: snapshots };
+  const todayStr = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
+  putChunkedCache_(cacheKey, payload, dateStr === todayStr ? 300 : 21600);
+  return payload;
 }
 
 function formatCellDate_(v) {
@@ -964,9 +1020,12 @@ function doPost(e) {
     updateConfigValue_("최근_수집시각", tsFull + " (Worker)");
     updateConfigValue_("최근_수집건수", `${results.length} (서울 ${seoulCnt} + ITS ${itsCnt})`);
 
-    const cache = CacheService.getScriptCache();
-    cache.remove("latest_payload");
-    cache.remove("dates_payload");
+    if (body.radar) {
+      PropertiesService.getScriptProperties().setProperty("RADAR_KR_JSON", JSON.stringify(body.radar));
+    }
+    clearChunkedCache_("latest_payload");
+    clearChunkedCache_("dates_payload");
+    clearChunkedCache_("hist_" + dateStr);
     return jsonOut_({ ok: true, saved: results.length, historySheet: histName });
   } catch (err) {
     return jsonOut_({ ok: false, error: String(err && err.message ? err.message : err) });
