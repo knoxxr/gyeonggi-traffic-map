@@ -2,7 +2,13 @@
 
 대한민국 전국 **16개 광역시·도**, **256개 시·군·구**, **3,559개 행정동(읍·면·동)**, 그리고 **25,435개 ~2.1 km 육각 기지국 셀(확대 시 ~800 m H3 7-분할 초미세 셀 · 약 178,000셀 해상도 등가)** 위에서 **15분 단위(96구간) / 1시간 단위(24구간)** 모바일 통신 트래픽 **변화량**을 WebGL2 GPU 가속으로 실시간 시각화하는 웹 프로그램입니다.
 
-- **라이브 웹 앱 (PC·스마트폰)**: https://knoxxr.github.io/gyeonggi-traffic-map/
+- **라이브 웹 앱 (PC·스마트폰)**: https://knoxxr.github.io/gyeonggi-traffic-map/ (한국어: https://knoxxr.github.io/gyeonggi-traffic-map/?lang=ko)
+
+![Korea Mobile Traffic Monitor Animated Demo](screenshots/demo_animation.gif)
+
+| Desktop Overview (EN · Light) | Live Crowd · 12h AI Forecast (EN) | Dark Mode · Cloudflare Radar KR | Korean Mode (`한`) |
+| :---: | :---: | :---: | :---: |
+| ![Overview](screenshots/desktop_1_overview.png) | ![Gangnam Micro & Forecast](screenshots/desktop_3_micro_gangnam.png) | ![Dark Mode Radar](screenshots/desktop_4_overview_dark.png) | ![Korean Mode](screenshots/desktop_5_korean_spot.png) |
 
 ## 주요 기능
 
