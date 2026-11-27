@@ -4810,18 +4810,23 @@
     }
 
     // -----------------------------------------------------------------------
-    // 12. Boot
+    // 12. Boot (Real-Time LIVE Mode by Default)
     // -----------------------------------------------------------------------
     document.getElementById("bootOverlay").classList.add("hidden");
     applyStaticI18n();
-    updateLiveButtonUI();
     resizeCanvases();
     resetCamera(false);
     updateScaleBar();
     updateLegend();
-    recomputeFrameMetrics();
-    updateSidebar();
-    drawTimelineWave();
+    const _bootParams = new URLSearchParams(location.search);
+    if (_bootParams.get("live") !== "0") {
+      enableLiveKstMode();
+    } else {
+      updateLiveButtonUI();
+      recomputeFrameMetrics();
+      updateSidebar();
+      drawTimelineWave();
+    }
     renderGLLayer();
     renderVectorLayer();
     renderFXLayer();

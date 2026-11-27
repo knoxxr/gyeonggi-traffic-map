@@ -2,6 +2,6 @@
   "defaultApiUrl": "",
   "defaultToken": "",
   "defaultIntervalSec": 300,
-  "autoStartLive": false,
-  "_note": "배포한 Cloudflare Worker 또는 Google Apps Script 웹 앱 URL을 defaultApiUrl에 넣고 autoStartLive를 true로 바꾸면, 모든 방문자가 별도 설정 없이 즉시 실시간 데이터를 보게 됩니다. URL 파라미터(?api=https://...)로도 연결할 수 있습니다."
+  "autoStartLive": true,
+  "_note": "배포한 Cloudflare Worker 또는 Google Apps Script 웹 앱 URL을 defaultApiUrl에 넣으면 모든 방문자가 별도 설정 없이 즉시 실시간 데이터를 보게 됩니다. URL 파라미터(?api=https://...)로도 연결할 수 있습니다."
 }

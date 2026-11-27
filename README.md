@@ -23,7 +23,7 @@
   - **사전 계산 3차 보간 & Gzip 내장 번들**: 347 KB gzip 압축 데이터를 브라우저 네이티브 `DecompressionStream("gzip")`으로 0.7초 내 초기화, 총 단일 실행 파일 크기 **~640 KB**
   - **32×32 공간 격자 인덱스**: 전국 3,559개 행정동·256개 시군구 호버/클릭 히트 테스트를 O(1)에 처리
 - **실시간 유동인구·ITS 수집 & Google Drive 히스토리 재생 (`gas/Code.gs`)**:
-  - `LIVE` 모드: 한국 표준시(KST) 1초 동기화 + 3초 주기 실시간 트래픽 미세 변동 시뮬레이션
+  - `LIVE` 모드 (**기본 시작**): 접속 즉시 현재 한국 표준시(KST) 1초 동기화 + 3초 주기 실시간 트래픽 미세 변동으로 자동 실행 (`?live=0` 또는 타임라인 조작 시 시뮬레이션 모드로 전환)
   - **Cloudflare Worker 하이브리드 프록시 (`worker/`)**: 서울 공식 121곳 실시간 유동인구(SKT·KT 기반) + 전국 16개 시·도 44권역 ITS 도로 혼잡도 + **Cloudflare Radar 대한민국(KR) 실시간 모바일·NetFlow 지수**를 자동 수집·캐싱(Free Tier 샤드 순환 / Paid 5분 일괄) + KV 90일 히스토리 + Google Sheets 자동 전달([`worker/README.md`](worker/README.md))
   - **Google Sheets 자동 수집기 (`gas/Code.gs`)**: 별도 서버 없이 본인 Google 스프레드시트에서 121+44곳을 자동 누적(`최신현황` + 월별 `히스토리_YYYYMM` 시트)하거나 Worker Webhook(`doPost`) 수신([`gas/README.md`](gas/README.md))
   - **실측 핀 상세 분석 & 향후 12시간 AI 인구 예측**: 지도 핀 또는 사이드바 혼잡 TOP 항목 클릭 시 추정 인구·혼잡 안내 메시지·**향후 12시간 시간별 AI 인구 예측 차트**·**성별/상주·비상주 비율**·**8개 연령대 분포**를 즉시 확인
